@@ -13,3 +13,6 @@
 [submodule "tribe-sdk"]
 	path = tribe-sdk
 	url = git@github.com:chaalpritam/tribe-sdk.git
+[submodule "homebrew-tap"]
+	path = homebrew-tap
+	url = git@github.com:chaalpritam/tribe-homebrew.git

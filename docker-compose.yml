@@ -1,0 +1,99 @@
+services:
+  # ER server database
+  er-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: tribe
+      POSTGRES_PASSWORD: tribe
+      POSTGRES_DB: tribe_er
+    ports:
+      - "5435:5432"
+    volumes:
+      - er-pgdata:/var/lib/postgresql/data
+      - ./tribe-er-server/src/storage/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tribe -d tribe_er"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # Hub database
+  hub-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: tribe
+      POSTGRES_PASSWORD: tribe
+      POSTGRES_DB: tribe_hub
+    ports:
+      - "5436:5432"
+    volumes:
+      - hub-pgdata:/var/lib/postgresql/data
+      - ./tribe-hub/src/storage/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tribe -d tribe_hub"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # ER server (Ephemeral Rollup sequencer)
+  er-server:
+    build: ./tribe-er-server
+    ports:
+      - "3003:3003"
+    environment:
+      PORT: 3003
+      SOLANA_RPC_URL: https://api.devnet.solana.com
+      DATABASE_URL: postgresql://tribe:tribe@er-db:5432/tribe_er
+      SERVER_WALLET_PATH: /app/server-wallet.json
+      SETTLEMENT_INTERVAL_MS: 10000
+      SOCIAL_GRAPH_PROGRAM_ID: 8kKnWvbmTjWq5uPePk79RRbQMAXCszNFzHdRwUS4N74w
+      TID_REGISTRY_PROGRAM_ID: 4BSmJmRGQWKgioP9DG2bUuRS9U3V6soRauU7Nv6yGvHD
+    volumes:
+      - ./tribe-er-server/server-wallet.json:/app/server-wallet.json:ro
+    depends_on:
+      er-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3003/health').then(r=>r.ok?process.exit(0):process.exit(1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  # Hub (combined tweet storage + indexer + gossip peer sync)
+  hub:
+    build: ./tribe-hub
+    ports:
+      - "4000:4000"
+    environment:
+      PORT: 4000
+      HUB_ID: hub-primary
+      SOLANA_RPC_URL: https://api.devnet.solana.com
+      SOLANA_WS_URL: wss://api.devnet.solana.com
+      DATABASE_URL: postgresql://tribe:tribe@hub-db:5432/tribe_hub
+      MEDIA_DIR: /app/data/media
+      TID_REGISTRY_PROGRAM_ID: 4BSmJmRGQWKgioP9DG2bUuRS9U3V6soRauU7Nv6yGvHD
+      APP_KEY_REGISTRY_PROGRAM_ID: 5LtbFUeAoXWRovGpyWnRJhiCS62XsTYKVErT9kPpv4hN
+      SOCIAL_GRAPH_PROGRAM_ID: 8kKnWvbmTjWq5uPePk79RRbQMAXCszNFzHdRwUS4N74w
+      GOSSIP_INTERVAL_MS: 5000
+      MAX_SYNC_BATCH_SIZE: 100
+    volumes:
+      - hub-media:/app/data/media
+    depends_on:
+      hub-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:4000/health').then(r=>r.ok?process.exit(0):process.exit(1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+volumes:
+  er-pgdata:
+  hub-pgdata:
+  hub-media:

@@ -487,8 +487,8 @@ if command -v brew &>/dev/null; then
   echo -e "${BOLD}  brew tap + install (from remote tap)${NC}"
 
   TAP_NAME="chaalpritam/tribe-homebrew"
-  TAP_URL="git@github.com:chaalpritam/tribe-homebrew.git"
-  SOURCE_URL="git@github.com:chaalpritam/TribeEco.git"
+  TAP_URL="https://github.com/chaalpritam/tribe-homebrew.git"
+  SOURCE_URL="https://github.com/chaalpritam/TribeEco.git"
 
   # Pre-check: verify the TribeEco source repo is reachable
   set +e

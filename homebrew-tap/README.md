@@ -5,7 +5,7 @@ Decentralized Social Protocol on Solana.
 ## Install
 
 ```bash
-brew tap chaalpritam/tribe https://github.com/chaalpritam/homebrew-tribe
+brew tap chaalpritam/tribe-homebrew
 brew install tribe
 ```
 
@@ -26,15 +26,9 @@ tribe reset     # wipe data and start fresh
 - **Node.js** — installed automatically via brew dependency
 - **pnpm** — installed automatically via brew dependency
 
-## Publishing this tap
-
-Copy the `Formula/` directory to a new repo named `homebrew-tribe`:
+## Uninstall
 
 ```bash
-gh repo create chaalpritam/homebrew-tribe --public
-cp -r Formula/ /tmp/homebrew-tribe/
-cd /tmp/homebrew-tribe
-git init && git add . && git commit -m "Add tribe formula"
-git remote add origin git@github.com:chaalpritam/homebrew-tribe.git
-git push -u origin main
+brew uninstall tribe
+brew untap chaalpritam/tribe-homebrew
 ```

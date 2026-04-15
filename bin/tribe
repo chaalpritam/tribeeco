@@ -140,9 +140,24 @@ cmd_doctor() {
     fi
   done
 
-  # ER server wallet
-  if [ -f "$TRIBE_HOME/tribe-er-server/server-wallet.json" ]; then
+  # ER server wallet — auto-generate if missing, persist to ~/.tribe/
+  PERSISTENT_WALLET="$HOME/.tribe/server-wallet.json"
+  INSTALL_WALLET="$TRIBE_HOME/tribe-er-server/server-wallet.json"
+
+  if [ -f "$INSTALL_WALLET" ]; then
+    if [ ! -f "$PERSISTENT_WALLET" ]; then
+      mkdir -p "$HOME/.tribe"
+      cp "$INSTALL_WALLET" "$PERSISTENT_WALLET"
+    fi
     ok "ER server wallet present"
+  elif [ -f "$PERSISTENT_WALLET" ]; then
+    cp "$PERSISTENT_WALLET" "$INSTALL_WALLET"
+    ok "ER server wallet restored from ~/.tribe/"
+  elif command -v solana-keygen &>/dev/null; then
+    mkdir -p "$HOME/.tribe"
+    solana-keygen new -o "$INSTALL_WALLET" --no-bip39-passphrase 2>/dev/null
+    cp "$INSTALL_WALLET" "$PERSISTENT_WALLET"
+    ok "ER server wallet generated (backed up to ~/.tribe/)"
   else
     fail "tribe-er-server/server-wallet.json missing"
     ISSUES=$((ISSUES+1))
@@ -246,10 +261,30 @@ cmd_start() {
     fi
   done
 
-  # ER server wallet
-  if [ ! -f "$TRIBE_HOME/tribe-er-server/server-wallet.json" ]; then
-    fail "tribe-er-server/server-wallet.json missing"; MISSING=1
+  # ER server wallet — auto-generate if missing, persist to ~/.tribe/
+  PERSISTENT_WALLET="$HOME/.tribe/server-wallet.json"
+  INSTALL_WALLET="$TRIBE_HOME/tribe-er-server/server-wallet.json"
+
+  if [ ! -f "$INSTALL_WALLET" ]; then
+    if [ -f "$PERSISTENT_WALLET" ]; then
+      info "Restoring ER server wallet from ~/.tribe/"
+      cp "$PERSISTENT_WALLET" "$INSTALL_WALLET"
+      ok "ER server wallet restored"
+    elif command -v solana-keygen &>/dev/null; then
+      info "Generating ER server wallet..."
+      mkdir -p "$HOME/.tribe"
+      solana-keygen new -o "$INSTALL_WALLET" --no-bip39-passphrase 2>/dev/null
+      cp "$INSTALL_WALLET" "$PERSISTENT_WALLET"
+      ok "ER server wallet generated (backed up to ~/.tribe/)"
+    else
+      fail "tribe-er-server/server-wallet.json missing (install solana-cli to auto-generate)"; MISSING=1
+    fi
   else
+    # Ensure persistent backup exists
+    if [ ! -f "$PERSISTENT_WALLET" ]; then
+      mkdir -p "$HOME/.tribe"
+      cp "$INSTALL_WALLET" "$PERSISTENT_WALLET"
+    fi
     ok "ER server wallet present"
   fi
 

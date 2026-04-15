@@ -8,8 +8,8 @@ class Tribe < Formula
 
   depends_on "node"
   depends_on "pnpm"
-  depends_on "docker" => :optional
-  depends_on "docker-compose" => :optional
+  depends_on "docker"
+  depends_on "colima"
 
   def install
     # Clone with submodules is handled by brew's git strategy.
@@ -41,8 +41,10 @@ class Tribe < Formula
         tribe status       # see what's running
         tribe stop         # shut it down
 
+      Start Colima before using tribe (if not using Docker Desktop):
+        colima start
+
       Requirements:
-        - Docker must be running (Docker Desktop or Colima)
         - A server wallet is needed at:
           #{libexec}/tribe-er-server/server-wallet.json
 

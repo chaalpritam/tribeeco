@@ -324,14 +324,25 @@ cmd_start() {
     sleep 1
   done
 
+  # Detect local network IP
+  LOCAL_IP=$(ipconfig getifaddr en0 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || echo "")
+
   echo ""
   echo -e "${GREEN}╔══════════════════════════════════════════════╗${NC}"
   echo -e "${GREEN}║          TribeEco is running!                ║${NC}"
   echo -e "${GREEN}╚══════════════════════════════════════════════╝${NC}"
   echo ""
+  echo -e "  ${BOLD}Local access:${NC}"
   echo -e "    ${CYAN}Frontend app:${NC}   http://localhost:3002"
-  echo -e "    ${CYAN}Hub:${NC}            http://localhost:4000"
+  echo -e "    ${CYAN}Hub API:${NC}        http://localhost:4000"
   echo -e "    ${CYAN}ER server:${NC}      http://localhost:3003"
+  if [ -n "$LOCAL_IP" ]; then
+    echo ""
+    echo -e "  ${BOLD}Network access (use from other devices):${NC}"
+    echo -e "    ${CYAN}Frontend app:${NC}   http://${LOCAL_IP}:3002"
+    echo -e "    ${CYAN}Hub API:${NC}        http://${LOCAL_IP}:4000"
+    echo -e "    ${CYAN}ER server:${NC}      http://${LOCAL_IP}:3003"
+  fi
   echo ""
   echo -e "    ${CYAN}Network:${NC}        Solana Devnet"
   echo -e "    ${CYAN}App logs:${NC}       tribe logs app"

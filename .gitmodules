@@ -1,18 +1,18 @@
 [submodule "tribe-app"]
 	path = tribe-app
-	url = git@github.com:chaalpritam/tribe-demo-app.git
+	url = https://github.com/chaalpritam/tribe-demo-app.git
 [submodule "tribe-er-server"]
 	path = tribe-er-server
-	url = git@github.com:chaalpritam/tribe-er-server.git
+	url = https://github.com/chaalpritam/tribe-er-server.git
 [submodule "tribe-hub"]
 	path = tribe-hub
-	url = git@github.com:chaalpritam/tribe-hub.git
+	url = https://github.com/chaalpritam/tribe-hub.git
 [submodule "tribe-protocol"]
 	path = tribe-protocol
-	url = git@github.com:chaalpritam/tribe-protocol.git
+	url = https://github.com/chaalpritam/tribe-protocol.git
 [submodule "tribe-sdk"]
 	path = tribe-sdk
-	url = git@github.com:chaalpritam/tribe-sdk.git
+	url = https://github.com/chaalpritam/tribe-sdk.git
 [submodule "homebrew-tap"]
 	path = homebrew-tap
-	url = git@github.com:chaalpritam/tribe-homebrew.git
+	url = https://github.com/chaalpritam/tribe-homebrew.git

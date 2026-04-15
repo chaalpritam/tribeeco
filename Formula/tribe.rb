@@ -27,6 +27,12 @@ class Tribe < Formula
   end
 
   def post_install
+    # Start Colima if Docker daemon is not running
+    unless system "docker", "info", [:out, :err] => File::NULL
+      ohai "Starting Colima (Docker runtime)..."
+      system "colima", "start"
+    end
+
     # Initialize submodules after install
     system "git", "-C", libexec.to_s, "submodule", "update", "--init", "--recursive"
   end

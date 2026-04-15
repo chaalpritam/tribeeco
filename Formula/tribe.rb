@@ -30,7 +30,7 @@ class Tribe < Formula
 
   def post_install
     # Start Colima if Docker daemon is not running
-    unless system "docker", "info", [:out, :err] => File::NULL
+    unless quiet_system("docker", "info")
       ohai "Starting Colima (Docker runtime)..."
       system "colima", "start"
     end

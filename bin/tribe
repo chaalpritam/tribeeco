@@ -7,6 +7,7 @@
 #   tribe stop        Stop all services
 #   tribe status      Show status of all services
 #   tribe logs [svc]  Tail logs (hub | er-server | app | all)
+#   tribe tunnel      Show active Cloudflare tunnel URLs
 #   tribe doctor      Check prerequisites and system health
 #   tribe reset       Stop services and remove volumes (fresh start)
 #   tribe version     Show version info
@@ -30,6 +31,7 @@ if [ -z "$TRIBE_HOME" ]; then
 fi
 
 LOG_DIR="$TRIBE_HOME/.logs"
+TUNNEL_DIR="$TRIBE_HOME/.tunnels"
 COMPOSE_FILE="$TRIBE_HOME/docker-compose.yml"
 
 # ── Colors ───────────────────────────────────────────────────────────
@@ -65,6 +67,7 @@ cmd_help() {
   echo "  stop         Stop all running services"
   echo "  status       Show status of all services"
   echo "  logs [svc]   Tail logs: hub, er-server, app, or all (default)"
+  echo "  tunnel       Show active Cloudflare tunnel URLs"
   echo "  doctor       Check prerequisites and system health"
   echo "  reset        Stop services and wipe database volumes"
   echo "  version      Show version info"
@@ -181,6 +184,88 @@ cmd_doctor() {
     echo -e "  ${GREEN}All checks passed. Ready to run 'tribe start'.${NC}"
   else
     echo -e "  ${RED}$ISSUES issue(s) found. Fix them before running 'tribe start'.${NC}"
+  fi
+  echo ""
+}
+
+start_tunnels() {
+  if ! command -v cloudflared &>/dev/null; then
+    warn "cloudflared not found — skipping tunnels (brew install cloudflared)"
+    return
+  fi
+
+  mkdir -p "$TUNNEL_DIR"
+
+  for entry in "3002:frontend" "4000:hub-api" "3003:er-server"; do
+    PORT="${entry%%:*}"
+    NAME="${entry##*:}"
+    LOG_FILE="$TUNNEL_DIR/${NAME}.log"
+
+    cloudflared tunnel --url "http://localhost:${PORT}" > "$LOG_FILE" 2>&1 &
+    echo $! > "$TUNNEL_DIR/${NAME}.pid"
+  done
+
+  # Wait for tunnel URLs to appear in logs
+  sleep 3
+
+  TUNNEL_HUB=""
+  TUNNEL_ER=""
+  TUNNEL_FRONTEND=""
+
+  for entry in "3002:frontend:TUNNEL_FRONTEND" "4000:hub-api:TUNNEL_HUB" "3003:er-server:TUNNEL_ER"; do
+    PORT="${entry%%:*}"
+    REST="${entry#*:}"
+    NAME="${REST%%:*}"
+    VAR="${REST##*:}"
+    LOG_FILE="$TUNNEL_DIR/${NAME}.log"
+
+    # Retry a few times to extract the URL
+    for attempt in $(seq 1 10); do
+      URL=$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' "$LOG_FILE" 2>/dev/null | head -1)
+      if [ -n "$URL" ]; then
+        eval "$VAR=$URL"
+        break
+      fi
+      sleep 1
+    done
+  done
+
+  # Export for display
+  export TUNNEL_HUB TUNNEL_ER TUNNEL_FRONTEND
+}
+
+stop_tunnels() {
+  if [ -d "$TUNNEL_DIR" ]; then
+    for pidfile in "$TUNNEL_DIR"/*.pid; do
+      [ -f "$pidfile" ] || continue
+      PID=$(cat "$pidfile")
+      if kill -0 "$PID" 2>/dev/null; then
+        kill "$PID" 2>/dev/null
+      fi
+      rm -f "$pidfile"
+    done
+    rm -f "$TUNNEL_DIR"/*.log
+  fi
+}
+
+cmd_tunnel() {
+  echo ""
+  if [ -d "$TUNNEL_DIR" ] && ls "$TUNNEL_DIR"/*.pid &>/dev/null 2>&1; then
+    echo -e "${BOLD}Active tunnels:${NC}"
+    echo ""
+    for entry in "frontend:3002" "hub-api:4000" "er-server:3003"; do
+      NAME="${entry%%:*}"
+      PORT="${entry##*:}"
+      LOG_FILE="$TUNNEL_DIR/${NAME}.log"
+      URL=$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' "$LOG_FILE" 2>/dev/null | head -1)
+      if [ -n "$URL" ]; then
+        ok "$(printf '%-14s' "$NAME") → $URL"
+      else
+        fail "$(printf '%-14s' "$NAME") tunnel not ready"
+      fi
+    done
+  else
+    echo -e "  No active tunnels. Run ${CYAN}tribe start${NC} to create them."
   fi
   echo ""
 }
@@ -359,6 +444,10 @@ cmd_start() {
     sleep 1
   done
 
+  # 5. Start Cloudflare tunnels
+  echo "[5/5] Starting Cloudflare tunnels..."
+  start_tunnels
+
   # Detect local network IP
   LOCAL_IP=$(ipconfig getifaddr en0 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || echo "")
 
@@ -378,10 +467,18 @@ cmd_start() {
     echo -e "    ${CYAN}Hub API:${NC}        http://${LOCAL_IP}:4000"
     echo -e "    ${CYAN}ER server:${NC}      http://${LOCAL_IP}:3003"
   fi
+  if [ -n "$TUNNEL_FRONTEND" ] || [ -n "$TUNNEL_HUB" ] || [ -n "$TUNNEL_ER" ]; then
+    echo ""
+    echo -e "  ${BOLD}Public tunnel access (share with anyone):${NC}"
+    [ -n "$TUNNEL_FRONTEND" ] && echo -e "    ${CYAN}Frontend app:${NC}   $TUNNEL_FRONTEND"
+    [ -n "$TUNNEL_HUB" ]      && echo -e "    ${CYAN}Hub API:${NC}        $TUNNEL_HUB"
+    [ -n "$TUNNEL_ER" ]       && echo -e "    ${CYAN}ER server:${NC}      $TUNNEL_ER"
+  fi
   echo ""
   echo -e "    ${CYAN}Network:${NC}        Solana Devnet"
   echo -e "    ${CYAN}App logs:${NC}       tribe logs app"
   echo -e "    ${CYAN}Docker logs:${NC}    tribe logs hub"
+  echo -e "    ${CYAN}Tunnels:${NC}        tribe tunnel"
   echo -e "    ${CYAN}Stop with:${NC}      tribe stop"
   echo ""
   echo -e "    ${YELLOW}Tip:${NC} Install Phantom wallet extension to connect."
@@ -396,19 +493,23 @@ cmd_stop() {
   if [ -f "$LOG_DIR/tribe-app.pid" ]; then
     PID=$(cat "$LOG_DIR/tribe-app.pid")
     if kill -0 "$PID" 2>/dev/null; then
-      echo "  [1/2] Stopping frontend app (PID $PID)..."
+      echo "  [1/3] Stopping frontend app (PID $PID)..."
       kill "$PID" 2>/dev/null
       wait "$PID" 2>/dev/null || true
     else
-      echo "  [1/2] Frontend app already stopped."
+      echo "  [1/3] Frontend app already stopped."
     fi
     rm -f "$LOG_DIR/tribe-app.pid"
   else
-    echo "  [1/2] No frontend PID found."
+    echo "  [1/3] No frontend PID found."
   fi
 
+  # Tunnels
+  echo "  [2/3] Stopping Cloudflare tunnels..."
+  stop_tunnels
+
   # Docker
-  echo "  [2/2] Stopping Docker services..."
+  echo "  [3/3] Stopping Docker services..."
   docker-compose -f "$COMPOSE_FILE" down
 
   echo ""
@@ -505,6 +606,7 @@ case "$COMMAND" in
   stop)    cmd_stop "$@" ;;
   status)  cmd_status "$@" ;;
   logs)    cmd_logs "$@" ;;
+  tunnel)  cmd_tunnel "$@" ;;
   doctor)  cmd_doctor "$@" ;;
   reset)   cmd_reset "$@" ;;
   version) cmd_version "$@" ;;

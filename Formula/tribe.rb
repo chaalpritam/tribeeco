@@ -9,7 +9,9 @@ class Tribe < Formula
   depends_on "node"
   depends_on "pnpm"
   depends_on "docker"
+  depends_on "docker-compose"
   depends_on "colima"
+  depends_on "solana"
 
   def install
     # Clone with submodules is handled by brew's git strategy.
@@ -35,6 +37,13 @@ class Tribe < Formula
 
     # Initialize submodules after install
     system "git", "-C", libexec.to_s, "submodule", "update", "--init", "--recursive"
+
+    # Generate ER server wallet if missing
+    wallet = "#{libexec}/tribe-er-server/server-wallet.json"
+    unless File.exist?(wallet)
+      ohai "Generating ER server wallet..."
+      system "solana-keygen", "new", "-o", wallet, "--no-bip39-passphrase"
+    end
   end
 
   def caveats
@@ -47,15 +56,8 @@ class Tribe < Formula
         tribe status       # see what's running
         tribe stop         # shut it down
 
-      Start Colima before using tribe (if not using Docker Desktop):
-        colima start
-
-      Requirements:
-        - A server wallet is needed at:
-          #{libexec}/tribe-er-server/server-wallet.json
-
-      Generate a wallet:
-        solana-keygen new -o #{libexec}/tribe-er-server/server-wallet.json --no-bip39-passphrase
+      Colima and Docker are auto-started during install.
+      If Docker stops, restart with: colima start
 
       Services:
         Frontend    http://localhost:3002

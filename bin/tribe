@@ -9,6 +9,7 @@
 #   tribe logs [svc]  Tail logs (hub | er-server | app | all)
 #   tribe tunnel      Start/show Cloudflare tunnels for public access
 #   tribe tunnel stop Stop Cloudflare tunnels
+#   tribe seed        Show/set seed node for network auto-connect
 #   tribe peers       Show connected hub peers and sync status
 #   tribe peer add    Connect to another hub (tribe peer add <url>)
 #   tribe network     Show all access URLs (local, LAN, tunnel)
@@ -72,6 +73,7 @@ cmd_help() {
   echo "  status       Show status of all services"
   echo "  logs [svc]   Tail logs: hub, er-server, app, or all (default)"
   echo "  tunnel       Start/show Cloudflare tunnels for public access"
+  echo "  seed         Show/set seed node for network auto-connect"
   echo "  peers        Show connected hub peers"
   echo "  peer add     Connect to another hub: tribe peer add <url>"
   echo "  peer sync    Show sync status with peers"
@@ -431,6 +433,53 @@ cmd_peers() {
   cmd_peer list
 }
 
+# ── Seed node management ────────────────────────────────────────────
+
+cmd_seed() {
+  local subcmd="${1:-show}"
+  SEED_FILE="$HOME/.tribe/seed"
+
+  case "$subcmd" in
+    set)
+      local url="$2"
+      if [ -z "$url" ]; then
+        echo "Usage: tribe seed set <ws-url>"
+        echo "Example: tribe seed set ws://203.0.113.10:4000/gossip"
+        exit 1
+      fi
+      mkdir -p "$HOME/.tribe"
+      echo "$url" > "$SEED_FILE"
+      ok "Seed node set: $url"
+      # If hub is running, connect immediately
+      if curl -sf http://localhost:4000/health > /dev/null 2>&1; then
+        info "Hub is running, connecting now..."
+        curl -sf -X POST http://localhost:4000/v1/peers \
+          -H "Content-Type: application/json" \
+          -d "{\"url\": \"$url\"}" > /dev/null 2>&1 && ok "Connected to seed node" || warn "Could not connect (will retry on next start)"
+      fi
+      ;;
+    remove)
+      rm -f "$SEED_FILE"
+      ok "Seed node removed"
+      ;;
+    show|"")
+      echo ""
+      if [ -f "$SEED_FILE" ]; then
+        echo -e "  ${BOLD}Seed node:${NC} $(cat "$SEED_FILE")"
+      else
+        echo "  No seed node configured."
+        echo ""
+        echo "  Set one with:"
+        echo -e "    ${CYAN}tribe seed set ws://<PUBLIC_IP>:4000/gossip${NC}"
+      fi
+      echo ""
+      ;;
+    *)
+      echo "Usage: tribe seed [set <url> | remove | show]"
+      ;;
+  esac
+}
+
 cmd_start() {
   # Run doctor checks first
   echo ""
@@ -594,6 +643,22 @@ cmd_start() {
   wait_for_service "Hub" "http://localhost:4000/health" 30
   wait_for_service "ER server" "http://localhost:3003/health" 30
 
+  # Auto-connect to seed node if configured
+  SEED_FILE="$HOME/.tribe/seed"
+  if [ -f "$SEED_FILE" ]; then
+    SEED_URL=$(head -1 "$SEED_FILE" | tr -d '[:space:]')
+    if [ -n "$SEED_URL" ]; then
+      info "Connecting to seed node: $SEED_URL"
+      if curl -sf -X POST http://localhost:4000/v1/peers \
+        -H "Content-Type: application/json" \
+        -d "{\"url\": \"$SEED_URL\"}" > /dev/null 2>&1; then
+        ok "Connected to seed node"
+      else
+        warn "Could not reach seed node (hub will keep retrying)"
+      fi
+    fi
+  fi
+
   # 4. Frontend
   echo "[4/4] Starting frontend app (Next.js on port 3002)..."
   cd "$TRIBE_HOME/tribe-app"
@@ -752,6 +817,7 @@ case "$COMMAND" in
   status)  cmd_status "$@" ;;
   logs)    cmd_logs "$@" ;;
   tunnel)  cmd_tunnel "$@" ;;
+  seed)    cmd_seed "$@" ;;
   peer)    cmd_peer "$@" ;;
   peers)   cmd_peers "$@" ;;
   network) cmd_network "$@" ;;

@@ -1,0 +1,46 @@
+services:
+  hub-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: tribe
+      POSTGRES_PASSWORD: tribe
+      POSTGRES_DB: tribe_hub
+    volumes:
+      - hub-pgdata:/var/lib/postgresql/data
+      - ../../tribe-hub/src/storage/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tribe -d tribe_hub"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  hub:
+    build: ../../tribe-hub
+    ports:
+      - "4000:4000"
+    environment:
+      PORT: 4000
+      HUB_ID: seed-1
+      SOLANA_RPC_URL: https://api.devnet.solana.com
+      SOLANA_WS_URL: wss://api.devnet.solana.com
+      DATABASE_URL: postgresql://tribe:tribe@hub-db:5432/tribe_hub
+      MEDIA_DIR: /app/data/media
+      GOSSIP_INTERVAL_MS: 5000
+      MAX_SYNC_BATCH_SIZE: 100
+    volumes:
+      - hub-media:/app/data/media
+    depends_on:
+      hub-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:4000/health').then(r=>r.ok?process.exit(0):process.exit(1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+volumes:
+  hub-pgdata:
+  hub-media:

@@ -37,7 +37,24 @@ See [HOW-IT-WORKS.md](./HOW-IT-WORKS.md) for a detailed walkthrough of every lay
 
 ## Quick Start
 
-### 1. Build the on-chain programs
+### Install via Homebrew (recommended)
+
+```bash
+brew tap chaalpritam/tribe
+brew install tribe
+tribe start
+```
+
+This auto-installs all dependencies (Docker, Colima, Node.js, pnpm, Solana CLI), generates a server wallet, and boots all services.
+
+### Or start manually with Docker
+
+```bash
+docker-compose up -d        # Start hub, ER server, and databases
+cd tribe-app && pnpm install && pnpm dev -p 3002   # Start frontend
+```
+
+### Build the on-chain programs
 
 ```bash
 cd tribe-protocol
@@ -46,44 +63,7 @@ anchor build
 anchor test          # 23 integration tests against local validator
 ```
 
-### 2. Start everything with Docker
-
-```bash
-# Start hub, ER server, and all Postgres databases
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
-
-# Stop
-docker-compose down
-```
-
-### 3. Or start services individually
-
-```bash
-# Hub (port 4000) — tweet storage + indexing + gossip
-cd tribe-hub
-cp .env.example .env
-docker-compose up -d    # PostgreSQL on 5436
-pnpm install && pnpm run dev
-
-# ER server (port 3003)
-cd tribe-er-server
-cp .env.example .env
-docker-compose up -d    # PostgreSQL on 5435
-pnpm install && pnpm run dev
-```
-
-### 4. Start the frontend
-
-```bash
-cd tribe-app
-pnpm install
-pnpm run dev -p 3002    # http://localhost:3002
-```
-
-### 5. Build the SDK
+### Build the SDK
 
 ```bash
 cd tribe-sdk
@@ -150,11 +130,56 @@ Human-readable names bound to TIDs. Usernames are up to 20 characters, require a
 - **BLAKE3** -- content-addressable hashing for tweets
 - **Protocol Buffers** -- message encoding in the SDK
 
-## Multi-Node Deployment
+## CLI Commands
 
-TribeEco supports running on multiple machines for high availability. Hubs gossip-sync all data, the frontend auto-fails-over between nodes, and ER servers operate independently.
+```bash
+tribe start          # boot all services
+tribe stop           # shut everything down
+tribe status         # check what's running
+tribe doctor         # verify prerequisites
+tribe logs [svc]     # tail logs (hub, er-server, app, all)
+tribe tunnel         # start Cloudflare tunnels for public access
+tribe seed set <url> # set seed node for network auto-connect
+tribe peers          # show connected hub peers
+tribe peer add <url> # connect to another hub
+tribe network        # show all access URLs
+tribe reset          # wipe data and start fresh
+```
 
-See [HOW-TO-RUN.md](./HOW-TO-RUN.md#multi-node-deployment-2-macs) for full setup instructions using Cloudflare Tunnel.
+## Distributed Network
+
+TribeEco nodes discover each other through a **seed node** — a lightweight hub running on a VPS with a public IP. Home nodes auto-connect to the seed on startup, and the gossip protocol handles peer discovery and message sync.
+
+### Deploy a seed node (free Oracle Cloud VPS)
+
+```bash
+ssh ubuntu@<VPS_IP>
+git clone --recurse-submodules https://github.com/chaalpritam/TribeEco.git
+cd TribeEco/deploy/seed
+./setup-seed.sh
+```
+
+### Connect nodes to the seed
+
+```bash
+tribe seed set ws://<SEED_IP>:4000/gossip
+tribe start
+```
+
+All nodes connected to the seed automatically sync via the gossip protocol.
+
+### Direct peer connections (same network)
+
+```bash
+tribe peer add ws://192.168.1.10:4000/gossip
+```
+
+### Public access via Cloudflare Tunnels
+
+```bash
+tribe tunnel       # creates public URLs for hub, er-server, frontend
+tribe network      # shows all access URLs
+```
 
 ## Documentation
 

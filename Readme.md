@@ -34,6 +34,8 @@ See [HOW-IT-WORKS.md](./HOW-IT-WORKS.md) for a detailed walkthrough of every lay
 | [tribe-hub](./tribe-hub) | Decentralized hub -- combined tweet storage + indexer + gossip peer sync |
 | [tribe-er-server](./tribe-er-server) | Ephemeral Rollup sequencer -- instant follows, batched L1 settlement every 10s |
 | [tribe-app](./tribe-app) | Next.js frontend -- 10 pages: feed, explore, channels, profile, threads, search, DMs, notifications, bookmarks, settings |
+| ~~[tribe-indexer](./tribe-indexer)~~ | **Deprecated** -- Solana event indexer, merged into tribe-hub |
+| ~~[tribe-tweet-server](./tribe-tweet-server)~~ | **Deprecated** -- Tweet storage server, merged into tribe-hub |
 
 ## Run a Tribe Node
 

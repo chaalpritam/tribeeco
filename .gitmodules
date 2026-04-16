@@ -16,3 +16,9 @@
 [submodule "homebrew-tap"]
 	path = homebrew-tap
 	url = https://github.com/chaalpritam/homebrew-tribe.git
+[submodule "tribe-indexer"]
+	path = tribe-indexer
+	url = https://github.com/chaalpritam/tribe-indexer.git
+[submodule "tribe-tweet-server"]
+	path = tribe-tweet-server
+	url = https://github.com/chaalpritam/tribe-cast-server.git

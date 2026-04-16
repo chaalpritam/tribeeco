@@ -13,7 +13,6 @@ class Tribe < Formula
   depends_on "colima"
   depends_on "solana"
   depends_on "tailscale"
-  depends_on "railway" => :optional
 
   def install
     # Clone with submodules is handled by brew's git strategy.

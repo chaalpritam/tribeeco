@@ -8,7 +8,6 @@
 #   tribe status      Show status of all services
 #   tribe logs [svc]  Tail logs (hub | er-server | app | all)
 #   tribe network     Show all access URLs (local, LAN, Tailscale)
-#   tribe deploy      Deploy TribeEco to Railway (public cloud)
 #   tribe doctor      Check prerequisites and system health
 #   tribe reset       Stop services and remove volumes (fresh start)
 #   tribe version     Show version info
@@ -68,7 +67,6 @@ cmd_help() {
   echo "  status       Show status of all services"
   echo "  logs [svc]   Tail logs: hub, er-server, app, or all (default)"
   echo "  network      Show all access URLs (local, LAN, Tailscale)"
-  echo "  deploy       Deploy TribeEco to Railway (public cloud)"
   echo "  doctor       Check prerequisites and system health"
   echo "  reset        Stop services and wipe database volumes"
   echo "  version      Show version info"
@@ -549,7 +547,6 @@ case "$COMMAND" in
   status)  cmd_status "$@" ;;
   logs)    cmd_logs "$@" ;;
   network) cmd_network "$@" ;;
-  deploy)  exec "$TRIBE_HOME/scripts/railway-deploy.sh" "$@" ;;
   doctor)  cmd_doctor "$@" ;;
   reset)   cmd_reset "$@" ;;
   version) cmd_version "$@" ;;

@@ -7,7 +7,11 @@
 #   tribe stop        Stop all services
 #   tribe status      Show status of all services
 #   tribe logs [svc]  Tail logs (hub | er-server | app | all)
-#   tribe network     Show all access URLs (local, LAN, Tailscale)
+#   tribe tunnel      Start/show Cloudflare tunnels for public access
+#   tribe tunnel stop Stop Cloudflare tunnels
+#   tribe peers       Show connected hub peers and sync status
+#   tribe peer add    Connect to another hub (tribe peer add <url>)
+#   tribe network     Show all access URLs (local, LAN, tunnel)
 #   tribe doctor      Check prerequisites and system health
 #   tribe reset       Stop services and remove volumes (fresh start)
 #   tribe version     Show version info
@@ -31,6 +35,7 @@ if [ -z "$TRIBE_HOME" ]; then
 fi
 
 LOG_DIR="$TRIBE_HOME/.logs"
+TUNNEL_DIR="$HOME/.tribe/tunnels"
 COMPOSE_FILE="$TRIBE_HOME/docker-compose.yml"
 
 # ── Colors ───────────────────────────────────────────────────────────
@@ -66,7 +71,11 @@ cmd_help() {
   echo "  stop         Stop all running services"
   echo "  status       Show status of all services"
   echo "  logs [svc]   Tail logs: hub, er-server, app, or all (default)"
-  echo "  network      Show all access URLs (local, LAN, Tailscale)"
+  echo "  tunnel       Start/show Cloudflare tunnels for public access"
+  echo "  peers        Show connected hub peers"
+  echo "  peer add     Connect to another hub: tribe peer add <url>"
+  echo "  peer sync    Show sync status with peers"
+  echo "  network      Show all access URLs (local, LAN, tunnel)"
   echo "  doctor       Check prerequisites and system health"
   echo "  reset        Stop services and wipe database volumes"
   echo "  version      Show version info"
@@ -187,17 +196,68 @@ cmd_doctor() {
   echo ""
 }
 
-get_tailscale_ip() {
-  if command -v tailscale &>/dev/null; then
-    tailscale ip -4 2>/dev/null || echo ""
-  else
-    echo ""
+# ── Cloudflare Tunnel helpers ────────────────────────────────────────
+
+get_tunnel_url() {
+  local name="$1"
+  local log_file="$TUNNEL_DIR/${name}.log"
+  if [ -f "$log_file" ]; then
+    grep -o 'https://[a-zA-Z0-9._-]*\.trycloudflare\.com' "$log_file" 2>/dev/null | head -1
+  fi
+}
+
+start_tunnels() {
+  if ! command -v cloudflared &>/dev/null; then
+    warn "cloudflared not found — skipping tunnels (brew install cloudflared)"
+    return 1
+  fi
+
+  mkdir -p "$TUNNEL_DIR"
+
+  for entry in "4000:hub" "3003:er-server" "3002:frontend"; do
+    PORT="${entry%%:*}"
+    NAME="${entry##*:}"
+    PID_FILE="$TUNNEL_DIR/${NAME}.pid"
+    LOG_FILE="$TUNNEL_DIR/${NAME}.log"
+
+    # Skip if already running
+    if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
+      continue
+    fi
+
+    cloudflared tunnel --url "http://localhost:${PORT}" > "$LOG_FILE" 2>&1 &
+    echo $! > "$PID_FILE"
+  done
+
+  # Wait for URLs to appear
+  info "Waiting for tunnel URLs..."
+  for attempt in $(seq 1 15); do
+    HUB_URL=$(get_tunnel_url hub)
+    ER_URL=$(get_tunnel_url er-server)
+    FE_URL=$(get_tunnel_url frontend)
+    if [ -n "$HUB_URL" ] && [ -n "$ER_URL" ] && [ -n "$FE_URL" ]; then
+      break
+    fi
+    sleep 1
+  done
+}
+
+stop_tunnels() {
+  if [ -d "$TUNNEL_DIR" ]; then
+    for pidfile in "$TUNNEL_DIR"/*.pid; do
+      [ -f "$pidfile" ] || continue
+      PID=$(cat "$pidfile")
+      if kill -0 "$PID" 2>/dev/null; then
+        kill "$PID" 2>/dev/null
+      fi
+      rm -f "$pidfile"
+    done
+    rm -f "$TUNNEL_DIR"/*.log
   fi
 }
 
 show_network_info() {
   local LOCAL_IP="$1"
-  local TS_IP="$2"
 
   echo -e "  ${BOLD}Local access:${NC}"
   echo -e "    ${CYAN}Frontend app:${NC}   http://localhost:3002"
@@ -212,26 +272,163 @@ show_network_info() {
     echo -e "    ${CYAN}ER server:${NC}      http://${LOCAL_IP}:3003"
   fi
 
-  if [ -n "$TS_IP" ]; then
+  # Tunnel URLs
+  HUB_URL=$(get_tunnel_url hub)
+  ER_URL=$(get_tunnel_url er-server)
+  FE_URL=$(get_tunnel_url frontend)
+
+  if [ -n "$HUB_URL" ] || [ -n "$ER_URL" ] || [ -n "$FE_URL" ]; then
     echo ""
-    echo -e "  ${BOLD}Remote access via Tailscale (works from anywhere):${NC}"
-    echo -e "    ${CYAN}Frontend app:${NC}   http://${TS_IP}:3002"
-    echo -e "    ${CYAN}Hub API:${NC}        http://${TS_IP}:4000"
-    echo -e "    ${CYAN}ER server:${NC}      http://${TS_IP}:3003"
+    echo -e "  ${BOLD}Public access (Cloudflare Tunnels):${NC}"
+    [ -n "$FE_URL" ]  && echo -e "    ${CYAN}Frontend app:${NC}   $FE_URL"
+    [ -n "$HUB_URL" ] && echo -e "    ${CYAN}Hub API:${NC}        $HUB_URL"
+    [ -n "$ER_URL" ]  && echo -e "    ${CYAN}ER server:${NC}      $ER_URL"
+    echo ""
+    echo -e "  ${BOLD}Gossip URL (give this to other tribe nodes):${NC}"
+    HUB_WS=$(echo "$HUB_URL" | sed 's|https://|wss://|')
+    echo -e "    ${CYAN}${HUB_WS}/gossip${NC}"
   else
     echo ""
-    echo -e "  ${YELLOW}!${NC} Tailscale not connected — remote access unavailable"
-    echo -e "    Install: ${CYAN}brew install tailscale${NC}"
-    echo -e "    Start:   ${CYAN}sudo tailscaled &${NC} then ${CYAN}tailscale up${NC}"
+    echo -e "  ${YELLOW}!${NC} No tunnels active — run ${CYAN}tribe tunnel${NC} to start"
   fi
 }
 
 cmd_network() {
   echo ""
   LOCAL_IP=$(ipconfig getifaddr en0 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || echo "")
-  TS_IP=$(get_tailscale_ip)
-  show_network_info "$LOCAL_IP" "$TS_IP"
+  show_network_info "$LOCAL_IP"
   echo ""
+}
+
+cmd_tunnel() {
+  local subcmd="${1:-start}"
+  case "$subcmd" in
+    stop)
+      echo ""
+      info "Stopping tunnels..."
+      stop_tunnels
+      ok "Tunnels stopped"
+      echo ""
+      ;;
+    start|"")
+      echo ""
+      info "Starting Cloudflare tunnels..."
+      start_tunnels
+
+      HUB_URL=$(get_tunnel_url hub)
+      ER_URL=$(get_tunnel_url er-server)
+      FE_URL=$(get_tunnel_url frontend)
+
+      if [ -n "$HUB_URL" ]; then
+        echo ""
+        echo -e "  ${BOLD}Public tunnel URLs:${NC}"
+        [ -n "$FE_URL" ]  && ok "Frontend    → $FE_URL"
+        [ -n "$HUB_URL" ] && ok "Hub API     → $HUB_URL"
+        [ -n "$ER_URL" ]  && ok "ER server   → $ER_URL"
+        echo ""
+        echo -e "  ${BOLD}Gossip URL (give this to other tribe nodes):${NC}"
+        HUB_WS=$(echo "$HUB_URL" | sed 's|https://|wss://|')
+        echo -e "    ${CYAN}${HUB_WS}/gossip${NC}"
+      else
+        fail "Tunnels failed to start. Run: cloudflared tunnel login"
+      fi
+      echo ""
+      ;;
+    *)
+      echo "Usage: tribe tunnel [start|stop]"
+      ;;
+  esac
+}
+
+# ── Peer management ─────────────────────────────────────────────────
+
+cmd_peer() {
+  local subcmd="${1:-}"
+  shift 2>/dev/null || true
+
+  case "$subcmd" in
+    add)
+      local url="$1"
+      if [ -z "$url" ]; then
+        echo "Usage: tribe peer add <websocket-url>"
+        echo "Example: tribe peer add wss://abc-123.trycloudflare.com/gossip"
+        exit 1
+      fi
+      echo ""
+      info "Adding peer: $url"
+      RESPONSE=$(curl -sf -X POST http://localhost:4000/v1/peers \
+        -H "Content-Type: application/json" \
+        -d "{\"url\": \"$url\"}" 2>&1)
+      if [ $? -eq 0 ]; then
+        ok "Peer added and connection initiated"
+        echo "  $RESPONSE" | python3 -m json.tool 2>/dev/null || echo "  $RESPONSE"
+      else
+        fail "Failed to add peer. Is the hub running?"
+      fi
+      echo ""
+      ;;
+    ""|list)
+      echo ""
+      echo -e "${BOLD}Connected peers:${NC}"
+      echo ""
+      RESPONSE=$(curl -sf http://localhost:4000/v1/peers 2>&1)
+      if [ $? -eq 0 ]; then
+        echo "$RESPONSE" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+hub_id = data.get('hubId', 'unknown')
+peers = data.get('peers', [])
+connected = data.get('connectedCount', 0)
+print(f'  This hub: {hub_id}')
+print(f'  Connected: {connected} peer(s)')
+print()
+if not peers:
+    print('  No peers yet. Add one with: tribe peer add <url>')
+for p in peers:
+    status = '\033[0;32m●\033[0m' if p.get('connected') else '\033[0;31m●\033[0m'
+    hub = p.get('hub_id', 'unknown')
+    url = p.get('url', '')
+    msgs = p.get('message_count', 0)
+    print(f'  {status} {hub}')
+    print(f'    URL: {url}')
+    print(f'    Messages: {msgs}')
+    print()
+" 2>/dev/null || echo "  $RESPONSE"
+      else
+        fail "Failed to fetch peers. Is the hub running?"
+      fi
+      echo ""
+      ;;
+    sync)
+      echo ""
+      echo -e "${BOLD}Sync status:${NC}"
+      echo ""
+      RESPONSE=$(curl -sf http://localhost:4000/v1/sync/status 2>&1)
+      if [ $? -eq 0 ]; then
+        echo "$RESPONSE" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+syncs = data.get('syncStates', data) if isinstance(data, dict) else data
+if not syncs:
+    print('  No sync history yet.')
+for s in (syncs if isinstance(syncs, list) else []):
+    peer = s.get('peer_hub_id', 'unknown')
+    last = s.get('last_sync_at', 'never')
+    print(f'  {peer}: last synced {last}')
+" 2>/dev/null || echo "  $RESPONSE"
+      else
+        fail "Failed to fetch sync status. Is the hub running?"
+      fi
+      echo ""
+      ;;
+    *)
+      echo "Usage: tribe peer [add <url> | list | sync]"
+      ;;
+  esac
+}
+
+cmd_peers() {
+  cmd_peer list
 }
 
 cmd_start() {
@@ -408,24 +605,28 @@ cmd_start() {
     sleep 1
   done
 
+  # 5. Start Cloudflare tunnels
+  echo "[5/5] Starting Cloudflare tunnels..."
+  start_tunnels
+
   # Detect network IPs
   LOCAL_IP=$(ipconfig getifaddr en0 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || echo "")
-  TS_IP=$(get_tailscale_ip)
 
   echo ""
   echo -e "${GREEN}╔══════════════════════════════════════════════╗${NC}"
   echo -e "${GREEN}║          TribeEco is running!                ║${NC}"
   echo -e "${GREEN}╚══════════════════════════════════════════════╝${NC}"
   echo ""
-  show_network_info "$LOCAL_IP" "$TS_IP"
+  show_network_info "$LOCAL_IP"
   echo ""
   echo -e "    ${CYAN}Network:${NC}        Solana Devnet"
   echo -e "    ${CYAN}App logs:${NC}       tribe logs app"
   echo -e "    ${CYAN}Docker logs:${NC}    tribe logs hub"
+  echo -e "    ${CYAN}Peers:${NC}          tribe peers"
   echo -e "    ${CYAN}All URLs:${NC}       tribe network"
   echo -e "    ${CYAN}Stop with:${NC}      tribe stop"
   echo ""
-  echo -e "    ${YELLOW}Tip:${NC} Install Phantom wallet extension to connect."
+  echo -e "    ${YELLOW}Tip:${NC} Connect another node with: tribe peer add <gossip-url>"
   echo ""
 }
 
@@ -437,19 +638,23 @@ cmd_stop() {
   if [ -f "$LOG_DIR/tribe-app.pid" ]; then
     PID=$(cat "$LOG_DIR/tribe-app.pid")
     if kill -0 "$PID" 2>/dev/null; then
-      echo "  [1/2] Stopping frontend app (PID $PID)..."
+      echo "  [1/3] Stopping frontend app (PID $PID)..."
       kill "$PID" 2>/dev/null
       wait "$PID" 2>/dev/null || true
     else
-      echo "  [1/2] Frontend app already stopped."
+      echo "  [1/3] Frontend app already stopped."
     fi
     rm -f "$LOG_DIR/tribe-app.pid"
   else
-    echo "  [1/2] No frontend PID found."
+    echo "  [1/3] No frontend PID found."
   fi
 
+  # Tunnels
+  echo "  [2/3] Stopping Cloudflare tunnels..."
+  stop_tunnels
+
   # Docker
-  echo "  [2/2] Stopping Docker services..."
+  echo "  [3/3] Stopping Docker services..."
   docker-compose -f "$COMPOSE_FILE" down
 
   echo ""
@@ -546,6 +751,9 @@ case "$COMMAND" in
   stop)    cmd_stop "$@" ;;
   status)  cmd_status "$@" ;;
   logs)    cmd_logs "$@" ;;
+  tunnel)  cmd_tunnel "$@" ;;
+  peer)    cmd_peer "$@" ;;
+  peers)   cmd_peers "$@" ;;
   network) cmd_network "$@" ;;
   doctor)  cmd_doctor "$@" ;;
   reset)   cmd_reset "$@" ;;

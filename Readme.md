@@ -35,9 +35,11 @@ See [HOW-IT-WORKS.md](./HOW-IT-WORKS.md) for a detailed walkthrough of every lay
 | [tribe-er-server](./tribe-er-server) | Ephemeral Rollup sequencer -- instant follows, batched L1 settlement every 10s |
 | [tribe-app](./tribe-app) | Next.js frontend -- 10 pages: feed, explore, channels, profile, threads, search, DMs, notifications, bookmarks, settings |
 
-## Quick Start
+## Run a Tribe Node
 
-### Install via Homebrew (recommended)
+### macOS (Homebrew)
+
+Works on MacBook, Mac Mini, Mac Pro (Intel or Apple Silicon).
 
 ```bash
 brew tap chaalpritam/tribe
@@ -45,16 +47,76 @@ brew install tribe
 tribe start
 ```
 
-This auto-installs all dependencies (Docker, Colima, Node.js, pnpm, Solana CLI), generates a server wallet, and boots all services.
-
-### Or start manually with Docker
+Auto-installs all dependencies (Docker, Colima, Node.js, pnpm, Solana CLI), generates a server wallet, and boots all services.
 
 ```bash
-docker-compose up -d        # Start hub, ER server, and databases
-cd tribe-app && pnpm install && pnpm dev -p 3002   # Start frontend
+tribe seed set ws://<SEED_IP>:4000/gossip   # connect to the network
+tribe peers                                  # verify connection
+tribe network                                # show all URLs
 ```
 
-### Build the on-chain programs
+### Raspberry Pi
+
+Works on Raspberry Pi 4 (4GB+) and Raspberry Pi 5 with Raspberry Pi OS 64-bit.
+
+**One-line install:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/chaalpritam/TribeEco/master/deploy/raspberry-pi/setup.sh | bash
+```
+
+**Or step by step:**
+
+```bash
+git clone --recurse-submodules https://github.com/chaalpritam/TribeEco.git ~/tribe
+cd ~/tribe/deploy/raspberry-pi
+./setup.sh
+```
+
+After setup, connect to the network:
+
+```bash
+curl -X POST http://localhost:4000/v1/peers \
+  -H "Content-Type: application/json" \
+  -d '{"url": "ws://<SEED_IP>:4000/gossip"}'
+```
+
+Auto-start on boot:
+
+```bash
+sudo systemctl enable docker
+crontab -e   # add: @reboot cd ~/tribe && docker compose up -d
+```
+
+### Seed Node (VPS)
+
+The seed node is the public entry point for the network. Deploy on any VPS with a public IP (Oracle Cloud free tier, DigitalOcean, Hetzner).
+
+```bash
+ssh ubuntu@<VPS_IP>
+git clone --recurse-submodules https://github.com/chaalpritam/TribeEco.git ~/tribe-seed
+cd ~/tribe-seed/deploy/seed
+./setup-seed.sh
+```
+
+The seed prints its gossip URL. Share it with all node operators:
+
+```
+ws://<PUBLIC_IP>:4000/gossip
+```
+
+### Docker (any platform)
+
+```bash
+git clone --recurse-submodules https://github.com/chaalpritam/TribeEco.git
+cd TribeEco
+docker-compose up -d        # Start hub, ER server, and databases
+cd tribe-app && pnpm install && pnpm dev -p 3002   # Start frontend (optional)
+```
+
+## Build from Source
+
+### On-chain programs
 
 ```bash
 cd tribe-protocol
@@ -63,7 +125,7 @@ anchor build
 anchor test          # 23 integration tests against local validator
 ```
 
-### Build the SDK
+### SDK
 
 ```bash
 cd tribe-sdk

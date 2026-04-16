@@ -138,11 +138,10 @@ tribe stop           # shut everything down
 tribe status         # check what's running
 tribe doctor         # verify prerequisites
 tribe logs [svc]     # tail logs (hub, er-server, app, all)
-tribe tunnel         # start Cloudflare tunnels for public access
 tribe seed set <url> # set seed node for network auto-connect
 tribe peers          # show connected hub peers
 tribe peer add <url> # connect to another hub
-tribe network        # show all access URLs
+tribe network        # show all access URLs (local, LAN, seed)
 tribe reset          # wipe data and start fresh
 ```
 
@@ -174,11 +173,13 @@ All nodes connected to the seed automatically sync via the gossip protocol.
 tribe peer add ws://192.168.1.10:4000/gossip
 ```
 
-### Public access via Cloudflare Tunnels
+### Connect your web app
 
-```bash
-tribe tunnel       # creates public URLs for hub, er-server, frontend
-tribe network      # shows all access URLs
+Point your app to the seed node's public API:
+
+```
+Hub API:    http://<SEED_IP>:4000
+ER Server:  http://<SEED_IP>:3003
 ```
 
 ## Documentation

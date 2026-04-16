@@ -12,8 +12,7 @@ class Tribe < Formula
   depends_on "docker-compose"
   depends_on "colima"
   depends_on "solana"
-  depends_on "tailscale"
-  depends_on "cloudflared"
+  depends_on "tailscale" => :optional
 
   def install
     # Clone with submodules is handled by brew's git strategy.

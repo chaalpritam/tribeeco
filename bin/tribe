@@ -7,12 +7,10 @@
 #   tribe stop        Stop all services
 #   tribe status      Show status of all services
 #   tribe logs [svc]  Tail logs (hub | er-server | app | all)
-#   tribe tunnel      Start/show Cloudflare tunnels for public access
-#   tribe tunnel stop Stop Cloudflare tunnels
 #   tribe seed        Show/set seed node for network auto-connect
 #   tribe peers       Show connected hub peers and sync status
 #   tribe peer add    Connect to another hub (tribe peer add <url>)
-#   tribe network     Show all access URLs (local, LAN, tunnel)
+#   tribe network     Show all access URLs (local, LAN, seed)
 #   tribe doctor      Check prerequisites and system health
 #   tribe reset       Stop services and remove volumes (fresh start)
 #   tribe version     Show version info
@@ -36,7 +34,6 @@ if [ -z "$TRIBE_HOME" ]; then
 fi
 
 LOG_DIR="$TRIBE_HOME/.logs"
-TUNNEL_DIR="$HOME/.tribe/tunnels"
 COMPOSE_FILE="$TRIBE_HOME/docker-compose.yml"
 
 # ── Colors ───────────────────────────────────────────────────────────
@@ -72,12 +69,11 @@ cmd_help() {
   echo "  stop         Stop all running services"
   echo "  status       Show status of all services"
   echo "  logs [svc]   Tail logs: hub, er-server, app, or all (default)"
-  echo "  tunnel       Start/show Cloudflare tunnels for public access"
   echo "  seed         Show/set seed node for network auto-connect"
   echo "  peers        Show connected hub peers"
   echo "  peer add     Connect to another hub: tribe peer add <url>"
   echo "  peer sync    Show sync status with peers"
-  echo "  network      Show all access URLs (local, LAN, tunnel)"
+  echo "  network      Show all access URLs (local, LAN, seed)"
   echo "  doctor       Check prerequisites and system health"
   echo "  reset        Stop services and wipe database volumes"
   echo "  version      Show version info"
@@ -198,66 +194,6 @@ cmd_doctor() {
   echo ""
 }
 
-# ── Cloudflare Tunnel helpers ────────────────────────────────────────
-
-get_tunnel_url() {
-  local name="$1"
-  local log_file="$TUNNEL_DIR/${name}.log"
-  if [ -f "$log_file" ]; then
-    grep -o 'https://[a-zA-Z0-9._-]*\.trycloudflare\.com' "$log_file" 2>/dev/null | head -1
-  fi
-}
-
-start_tunnels() {
-  if ! command -v cloudflared &>/dev/null; then
-    warn "cloudflared not found — skipping tunnels (brew install cloudflared)"
-    return 1
-  fi
-
-  mkdir -p "$TUNNEL_DIR"
-
-  for entry in "4000:hub" "3003:er-server" "3002:frontend"; do
-    PORT="${entry%%:*}"
-    NAME="${entry##*:}"
-    PID_FILE="$TUNNEL_DIR/${NAME}.pid"
-    LOG_FILE="$TUNNEL_DIR/${NAME}.log"
-
-    # Skip if already running
-    if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
-      continue
-    fi
-
-    cloudflared tunnel --url "http://localhost:${PORT}" > "$LOG_FILE" 2>&1 &
-    echo $! > "$PID_FILE"
-  done
-
-  # Wait for URLs to appear
-  info "Waiting for tunnel URLs..."
-  for attempt in $(seq 1 15); do
-    HUB_URL=$(get_tunnel_url hub)
-    ER_URL=$(get_tunnel_url er-server)
-    FE_URL=$(get_tunnel_url frontend)
-    if [ -n "$HUB_URL" ] && [ -n "$ER_URL" ] && [ -n "$FE_URL" ]; then
-      break
-    fi
-    sleep 1
-  done
-}
-
-stop_tunnels() {
-  if [ -d "$TUNNEL_DIR" ]; then
-    for pidfile in "$TUNNEL_DIR"/*.pid; do
-      [ -f "$pidfile" ] || continue
-      PID=$(cat "$pidfile")
-      if kill -0 "$PID" 2>/dev/null; then
-        kill "$PID" 2>/dev/null
-      fi
-      rm -f "$pidfile"
-    done
-    rm -f "$TUNNEL_DIR"/*.log
-  fi
-}
-
 show_network_info() {
   local LOCAL_IP="$1"
 
@@ -274,24 +210,18 @@ show_network_info() {
     echo -e "    ${CYAN}ER server:${NC}      http://${LOCAL_IP}:3003"
   fi
 
-  # Tunnel URLs
-  HUB_URL=$(get_tunnel_url hub)
-  ER_URL=$(get_tunnel_url er-server)
-  FE_URL=$(get_tunnel_url frontend)
-
-  if [ -n "$HUB_URL" ] || [ -n "$ER_URL" ] || [ -n "$FE_URL" ]; then
+  # Seed node info
+  SEED_FILE="$HOME/.tribe/seed"
+  if [ -f "$SEED_FILE" ]; then
+    SEED_URL=$(head -1 "$SEED_FILE" | tr -d '[:space:]')
+    SEED_HTTP=$(echo "$SEED_URL" | sed 's|ws://|http://|;s|wss://|https://|;s|/gossip$||')
     echo ""
-    echo -e "  ${BOLD}Public access (Cloudflare Tunnels):${NC}"
-    [ -n "$FE_URL" ]  && echo -e "    ${CYAN}Frontend app:${NC}   $FE_URL"
-    [ -n "$HUB_URL" ] && echo -e "    ${CYAN}Hub API:${NC}        $HUB_URL"
-    [ -n "$ER_URL" ]  && echo -e "    ${CYAN}ER server:${NC}      $ER_URL"
-    echo ""
-    echo -e "  ${BOLD}Gossip URL (give this to other tribe nodes):${NC}"
-    HUB_WS=$(echo "$HUB_URL" | sed 's|https://|wss://|')
-    echo -e "    ${CYAN}${HUB_WS}/gossip${NC}"
+    echo -e "  ${BOLD}Seed node (public access for apps):${NC}"
+    echo -e "    ${CYAN}Hub API:${NC}        $SEED_HTTP"
+    echo -e "    ${CYAN}Gossip:${NC}         $SEED_URL"
   else
     echo ""
-    echo -e "  ${YELLOW}!${NC} No tunnels active — run ${CYAN}tribe tunnel${NC} to start"
+    echo -e "  ${YELLOW}!${NC} No seed node configured — run ${CYAN}tribe seed set <url>${NC}"
   fi
 }
 
@@ -300,46 +230,6 @@ cmd_network() {
   LOCAL_IP=$(ipconfig getifaddr en0 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || echo "")
   show_network_info "$LOCAL_IP"
   echo ""
-}
-
-cmd_tunnel() {
-  local subcmd="${1:-start}"
-  case "$subcmd" in
-    stop)
-      echo ""
-      info "Stopping tunnels..."
-      stop_tunnels
-      ok "Tunnels stopped"
-      echo ""
-      ;;
-    start|"")
-      echo ""
-      info "Starting Cloudflare tunnels..."
-      start_tunnels
-
-      HUB_URL=$(get_tunnel_url hub)
-      ER_URL=$(get_tunnel_url er-server)
-      FE_URL=$(get_tunnel_url frontend)
-
-      if [ -n "$HUB_URL" ]; then
-        echo ""
-        echo -e "  ${BOLD}Public tunnel URLs:${NC}"
-        [ -n "$FE_URL" ]  && ok "Frontend    → $FE_URL"
-        [ -n "$HUB_URL" ] && ok "Hub API     → $HUB_URL"
-        [ -n "$ER_URL" ]  && ok "ER server   → $ER_URL"
-        echo ""
-        echo -e "  ${BOLD}Gossip URL (give this to other tribe nodes):${NC}"
-        HUB_WS=$(echo "$HUB_URL" | sed 's|https://|wss://|')
-        echo -e "    ${CYAN}${HUB_WS}/gossip${NC}"
-      else
-        fail "Tunnels failed to start. Run: cloudflared tunnel login"
-      fi
-      echo ""
-      ;;
-    *)
-      echo "Usage: tribe tunnel [start|stop]"
-      ;;
-  esac
 }
 
 # ── Peer management ─────────────────────────────────────────────────
@@ -670,10 +560,6 @@ cmd_start() {
     sleep 1
   done
 
-  # 5. Start Cloudflare tunnels
-  echo "[5/5] Starting Cloudflare tunnels..."
-  start_tunnels
-
   # Detect network IPs
   LOCAL_IP=$(ipconfig getifaddr en0 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || echo "")
 
@@ -703,23 +589,19 @@ cmd_stop() {
   if [ -f "$LOG_DIR/tribe-app.pid" ]; then
     PID=$(cat "$LOG_DIR/tribe-app.pid")
     if kill -0 "$PID" 2>/dev/null; then
-      echo "  [1/3] Stopping frontend app (PID $PID)..."
+      echo "  [1/2] Stopping frontend app (PID $PID)..."
       kill "$PID" 2>/dev/null
       wait "$PID" 2>/dev/null || true
     else
-      echo "  [1/3] Frontend app already stopped."
+      echo "  [1/2] Frontend app already stopped."
     fi
     rm -f "$LOG_DIR/tribe-app.pid"
   else
-    echo "  [1/3] No frontend PID found."
+    echo "  [1/2] No frontend PID found."
   fi
 
-  # Tunnels
-  echo "  [2/3] Stopping Cloudflare tunnels..."
-  stop_tunnels
-
   # Docker
-  echo "  [3/3] Stopping Docker services..."
+  echo "  [2/2] Stopping Docker services..."
   docker-compose -f "$COMPOSE_FILE" down
 
   echo ""
@@ -816,7 +698,6 @@ case "$COMMAND" in
   stop)    cmd_stop "$@" ;;
   status)  cmd_status "$@" ;;
   logs)    cmd_logs "$@" ;;
-  tunnel)  cmd_tunnel "$@" ;;
   seed)    cmd_seed "$@" ;;
   peer)    cmd_peer "$@" ;;
   peers)   cmd_peers "$@" ;;

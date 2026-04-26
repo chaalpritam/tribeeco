@@ -22,3 +22,6 @@
 [submodule "tribe-tweet-server"]
 	path = tribe-tweet-server
 	url = https://github.com/chaalpritam/tribe-cast-server.git
+[submodule "tribeapp.wtf"]
+	path = tribeapp.wtf
+	url = https://github.com/chaalpritam/tribeapp-wtf.git

@@ -4,7 +4,7 @@
 
 ## Overview
 
-TribeEco is a decentralized social protocol built on Solana. It provides on-chain identity (TID), delegated app keys, human-readable usernames (.tribe), a social graph with an Ephemeral Rollup sequencer, and off-chain tweet storage with peer-to-peer gossip sync. The protocol is designed so that users fully own their identity and social data -- no platform can revoke access or censor content at the infrastructure layer.
+TribeEco is a decentralized social protocol built on Solana. It provides on-chain identity (TID), delegated app keys, human-readable usernames (.tribe), a social graph with an Ephemeral Rollup sequencer, hub registration for peer discovery, and off-chain storage of signed messages (tweets, reactions, DMs, channels, polls, events, tasks, crowdfunds, tips, bookmarks) with peer-to-peer gossip sync. The protocol is designed so that users fully own their identity and social data — no platform can revoke access or censor content at the infrastructure layer.
 
 ## Architecture
 
@@ -13,14 +13,14 @@ TribeEco is a decentralized social protocol built on Solana. It provides on-chai
                              |
                        tribe-sdk (TypeScript)
                        /         |          \
-           tribe-app        tribe-er-server   tribe-hub
-           (frontend)       (ER sequencer)    (tweets + indexing + gossip)
-                \              |                /
-  ┌──────────────┴─────────────┴───────────────┴────┐
-  |                Solana Programs                   |
-  |  tid-registry . app-key-registry                 |
-  |  username-registry . social-graph                |
-  └──────────────────────────────────────────────────┘
+   tribe-app / tribeapp.wtf   tribe-er-server   tribe-hub
+        (frontends)           (ER sequencer)    (storage + indexing + gossip)
+                \                  |                /
+  ┌──────────────┴──────────────────┴──────────────┴────┐
+  |                Solana Programs                       |
+  |  tid-registry . app-key-registry                     |
+  |  username-registry . social-graph . hub-registry     |
+  └──────────────────────────────────────────────────────┘
 ```
 
 See [HOW-IT-WORKS.md](./HOW-IT-WORKS.md) for a detailed walkthrough of every layer and how they connect.
@@ -29,13 +29,15 @@ See [HOW-IT-WORKS.md](./HOW-IT-WORKS.md) for a detailed walkthrough of every lay
 
 | Directory | Description |
 |-----------|-------------|
-| [tribe-protocol](./tribe-protocol) | Solana programs (Anchor) -- 5 programs, 23 instructions (identity, keys, usernames, social graph, hub registry) |
-| [tribe-sdk](./tribe-sdk) | TypeScript SDK -- DirectSolana and EphemeralRollup providers, identity clients, tweet client |
-| [tribe-hub](./tribe-hub) | Decentralized hub -- combined tweet storage + indexer + gossip peer sync |
-| [tribe-er-server](./tribe-er-server) | Ephemeral Rollup sequencer -- instant follows, batched L1 settlement every 10s |
-| [tribe-app](./tribe-app) | Next.js frontend -- 10 pages: feed, explore, channels, profile, threads, search, DMs, notifications, bookmarks, settings |
-| ~~[tribe-indexer](./tribe-indexer)~~ | **Deprecated** -- Solana event indexer, merged into tribe-hub |
-| ~~[tribe-tweet-server](./tribe-tweet-server)~~ | **Deprecated** -- Tweet storage server, merged into tribe-hub |
+| [tribe-protocol](./tribe-protocol) | Solana programs (Anchor) — 5 programs (tid-registry, app-key-registry, username-registry, social-graph w/ ER delegation, hub-registry) |
+| [tribe-sdk](./tribe-sdk) | TypeScript SDK — DirectSolana and EphemeralRollup providers; clients for identity, tweets, DMs, profiles, channels, bookmarks, polls, events, tasks, crowdfunds, tips, search |
+| [tribe-hub](./tribe-hub) | Decentralized hub — signed-message storage + Solana indexer + gossip peer sync; REST + WebSocket APIs |
+| [tribe-er-server](./tribe-er-server) | Ephemeral Rollup sequencer — instant follows, batched L1 settlement every 10s |
+| [tribe-app](./tribe-app) | Next.js frontend — protocol-first reference client with multi-node failover |
+| [tribeapp.wtf](./tribeapp.wtf) | Hyperlocal flavor of the web client + landing page (tribeapp.wtf) — runs off bundled seed data or a real backend |
+| [homebrew-tap](./homebrew-tap) | Homebrew formula (`brew tap chaalpritam/tribe && brew install tribe`) |
+| ~~[tribe-indexer](./tribe-indexer)~~ | **Deprecated** — Solana event indexer, merged into tribe-hub |
+| ~~[tribe-tweet-server](./tribe-tweet-server)~~ | **Deprecated** — Tweet storage server, merged into tribe-hub |
 
 ## Run a Tribe Node
 
@@ -52,7 +54,7 @@ tribe start
 Auto-installs all dependencies (Docker, Colima, Node.js, pnpm, Solana CLI), generates a server wallet, and boots all services.
 
 ```bash
-tribe seed set ws://<SEED_IP>:4000/gossip   # connect to the network
+tribe seed set ws://<SEED_IP>:4000/gossip   # connect to the network (wss:// also supported)
 tribe peers                                  # verify connection
 tribe network                                # show all URLs
 ```
@@ -124,7 +126,7 @@ cd tribe-app && pnpm install && pnpm dev -p 3002   # Start frontend (optional)
 cd tribe-protocol
 pnpm install
 anchor build
-anchor test          # 23 integration tests against local validator
+anchor test          # full integration suite against local validator
 ```
 
 ### SDK
@@ -137,14 +139,15 @@ pnpm run build
 
 ## Devnet Deployment
 
-All 4 programs are deployed to Solana devnet:
+All 5 programs are part of the workspace. The first four are deployed to Solana devnet; `hub-registry` is currently localnet-only as the network rolls out.
 
 | Program | Program ID | Instructions |
 |---------|------------|-------------|
 | tid-registry | `4BSmJmRGQWKgioP9DG2bUuRS9U3V6soRauU7Nv6yGvHD` | 5 |
 | app-key-registry | `5LtbFUeAoXWRovGpyWnRJhiCS62XsTYKVErT9kPpv4hN` | 3 |
 | username-registry | `65oKjSjcGYR61ASzDYczbodz6H8TARtJyQGvb5V9y9W1` | 4 |
-| social-graph | `8kKnWvbmTjWq5uPePk79RRbQMAXCszNFzHdRwUS4N74w` | 7 |
+| social-graph | `8kKnWvbmTjWq5uPePk79RRbQMAXCszNFzHdRwUS4N74w` | 7 (incl. ER-delegated) |
+| hub-registry | `HubReg1111111111111111111111111111111111111` | 4 |
 
 The ER sequencer authority is registered on devnet with a funded server wallet.
 
@@ -154,9 +157,11 @@ The ER sequencer authority is registered on devnet with a funded server wallet.
 
 Every user receives a unique auto-incrementing 64-bit numeric identity. Each TID has a custody address (primary wallet) and a recovery address (can reclaim the TID if the custody key is lost). TIDs are the universal identifier across the entire protocol.
 
-### Tweets
+### Signed Messages
 
-Messages are signed with ed25519 app keys and hashed with BLAKE3. Tweets are stored off-chain in the hub for throughput and cost efficiency, while the on-chain identity layer guarantees authorship and integrity. The hub validates every signature against on-chain app key records.
+Tweets are one of many message types. Every off-chain action is a `TribeMessage`: signed with an ed25519 app key, hashed with BLAKE3, encoded as protobuf, and stored by the hub. The current message set covers tweets, reactions, links (follow/unfollow proofs), profile fields, usernames, channels, encrypted DMs (1:1 and group, with read receipts), bookmarks, polls, events, tasks, crowdfunds, and tips. The hub validates every signature against on-chain app key records before storage and gossip.
+
+The on-chain identity layer guarantees authorship and integrity; off-chain storage gives the protocol throughput and cost efficiency. On-chain settlement programs for tips, crowdfunds, tasks, and karma are on the roadmap — today those primitives flow as signed messages.
 
 ### Social Graph
 
@@ -178,21 +183,23 @@ Human-readable names bound to TIDs. Usernames are up to 20 characters, require a
 
 | Service | Port | Description |
 |---------|------|-------------|
-| tribe-hub | 4000 | Tweet storage + indexing + gossip sync |
-| tribe-app | 3002 | Next.js frontend |
-| tribe-er-server | 3003 | ER sequencer + settlement |
+| tribe-hub | 4000 | Signed-message storage + Solana indexing + gossip sync |
+| tribe-er-server | 3003 | ER sequencer + L1 settlement |
+| tribe-app | 3002 | Next.js frontend (runs outside Docker) |
+| Hub PostgreSQL | 5436 | Hub database |
+| ER PostgreSQL | 5435 | ER server database |
 
 ## Tech Stack
 
-- **Rust / Anchor 0.31.1** -- on-chain Solana programs (5 programs, 23 instructions)
-- **TypeScript** -- SDK, tests, server applications, frontend
-- **Fastify** -- HTTP server framework (hub, ER server)
-- **PostgreSQL 16** -- off-chain storage (2 databases: hub state, ER pending ops)
-- **Next.js 16 / React 19** -- frontend with Tailwind CSS 4
-- **Solana wallet adapter** -- Phantom, Solflare wallet connection
-- **tweetnacl** -- ed25519 signature signing and verification
-- **BLAKE3** -- content-addressable hashing for tweets
-- **Protocol Buffers** -- message encoding in the SDK
+- **Rust / Anchor 0.31.1** — 5 on-chain Solana programs
+- **TypeScript** — SDK, tests, servers, frontends
+- **Fastify** — HTTP server framework (hub, ER server)
+- **PostgreSQL 16** — off-chain storage (2 databases: hub state, ER pending ops)
+- **Next.js 16 / React 19** — frontends with Tailwind CSS 4
+- **Solana wallet adapter** — Phantom, Solflare wallet connection
+- **tweetnacl** — ed25519 signing and verification (+ x25519 for DM encryption)
+- **BLAKE3** — content-addressable hashing for messages
+- **Protocol Buffers** — `TribeMessage` schema in the SDK
 
 ## CLI Commands
 
@@ -200,13 +207,14 @@ Human-readable names bound to TIDs. Usernames are up to 20 characters, require a
 tribe start          # boot all services
 tribe stop           # shut everything down
 tribe status         # check what's running
-tribe doctor         # verify prerequisites
+tribe doctor         # verify prerequisites; auto-generates server wallet if missing
 tribe logs [svc]     # tail logs (hub, er-server, app, all)
-tribe seed set <url> # set seed node for network auto-connect
+tribe seed set <url> # set seed node URL (ws:// or wss://) for network auto-connect
 tribe peers          # show connected hub peers
 tribe peer add <url> # connect to another hub
 tribe network        # show all access URLs (local, LAN, seed)
 tribe reset          # wipe data and start fresh
+tribe version        # print version
 ```
 
 ## Distributed Network

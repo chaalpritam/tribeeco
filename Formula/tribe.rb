@@ -15,13 +15,11 @@ class Tribe < Formula
   depends_on "tailscale" => :optional
 
   def install
-    # Clone with submodules is handled by brew's git strategy.
-    # Install the entire project to libexec so the structure is preserved.
     libexec.install Dir["*"]
     libexec.install ".gitmodules"
     libexec.install ".gitignore"
 
-    # Create a wrapper script that sets TRIBE_HOME and delegates to bin/tribe
+    # Wrapper that sets TRIBE_HOME and delegates to the real CLI
     (bin/"tribe").write <<~EOS
       #!/bin/bash
       export TRIBE_HOME="#{libexec}"
@@ -30,8 +28,20 @@ class Tribe < Formula
   end
 
   def post_install
-    # Initialize submodules after install
-    system "git", "-C", libexec.to_s, "submodule", "update", "--init", "--recursive"
+    # Avoid hanging on a credential prompt if a submodule's remote is private
+    ENV["GIT_TERMINAL_PROMPT"] = "0"
+
+    # Init each submodule separately so a private/unavailable one doesn't abort the install
+    submodules = `git -C "#{libexec}" config -f .gitmodules --get-regexp '^submodule\\..*\\.path$'`
+                   .lines.map { |l| l.split(/\s+/, 2)[1].to_s.strip }.reject(&:empty?)
+    submodules.each do |path|
+      unless quiet_system "git", "-C", libexec.to_s, "submodule", "update", "--init", "--recursive", path
+        opoo "Skipping submodule '#{path}' (clone failed — likely private or unavailable)."
+      end
+    end
+
+    # Install frontend dependencies
+    system "pnpm", "install", "--dir", "#{libexec}/tribe-app"
 
     # Restore wallet from persistent location if it exists
     persistent_wallet = File.expand_path("~/.tribe/server-wallet.json")
@@ -44,20 +54,15 @@ class Tribe < Formula
 
   def caveats
     <<~EOS
-      TribeEco has been installed!
+      TribeEco installed! Run 'tribe doctor' to verify your setup.
 
       Quick start:
-        tribe doctor       # check prerequisites
-        tribe start        # boot all services
-        tribe status       # see what's running
-        tribe stop         # shut it down
+        tribe doctor       # verify prerequisites
+        tribe start        # boot everything
+        tribe status       # check services
+        tribe stop         # shut down
 
       Colima starts automatically when you run 'tribe start'.
-
-      Services:
-        Frontend    http://localhost:3002
-        Hub API     http://localhost:4000
-        ER Server   http://localhost:3003
     EOS
   end
 

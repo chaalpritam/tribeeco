@@ -24,4 +24,4 @@
 	url = https://github.com/chaalpritam/tribe-cast-server.git
 [submodule "tribeapp.wtf"]
 	path = tribeapp.wtf
-	url = https://github.com/chaalpritam/tribeapp-wtf.git
+	url = https://github.com/chaalpritam/tribeapp.wtf.git

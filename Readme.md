@@ -213,9 +213,42 @@ tribe seed set <url> # set seed node URL (ws:// or wss://) for network auto-conn
 tribe peers          # show connected hub peers
 tribe peer add <url> # connect to another hub
 tribe network        # show all access URLs (local, LAN, seed)
+tribe share [--qr]   # print URLs to hand to other devices on the same Wi-Fi
+tribe link <hub>     # point this machine's tribe-app dev server at a remote hub
 tribe reset          # wipe data and start fresh
 tribe version        # print version
 ```
+
+## Cross-device development on one Wi-Fi
+
+Run the protocol on one machine (e.g. a Mac mini) and develop / test against it from your laptop and phone — no VPS, no Tailscale, no port-forwarding. All devices need to be on the same Wi-Fi.
+
+**On the machine running the stack** (e.g. Mac mini):
+
+```bash
+tribe start
+tribe share          # prints the URLs to copy into other devices
+tribe share --qr     # also renders a QR for the frontend (needs `brew install qrencode`)
+```
+
+`tribe share` prefers the Bonjour/mDNS hostname (`yourmac.local`) over the LAN IP — it survives DHCP lease changes, and macOS + iOS resolve it natively. The IP is shown as a fallback for clients that don't speak `.local`.
+
+**On your dev laptop** (e.g. MacBook Air running `tribe-app` against the Mac mini's hub):
+
+```bash
+tribe link http://yourmac.local:4000   # writes tribe-app/.env.local
+cd tribe-app && pnpm dev               # restart to pick up the env
+# now open http://localhost:3002 — it talks to the Mac mini's hub + ER
+```
+
+`tribe link` writes `NEXT_PUBLIC_HUB_URL` and derives `NEXT_PUBLIC_ER_SERVER_URL` from the same host (port 3003). Re-run with a different URL to switch targets.
+
+**On your iPhone** (testing the web app or a native iOS app on the same Wi-Fi):
+
+- **Web app**: open `http://yourmac.local:3002` in Safari (the URL `tribe share` prints under "Open the web app")
+- **Native app**: enter `http://yourmac.local:4000` as the Hub API URL in your app's settings, and `http://yourmac.local:3003` for the ER server
+
+The hub's CORS is wide-open in dev (`NODE_ENV != production` and no `CORS_ORIGINS` set), so cross-origin requests from another device's frontend work out of the box.
 
 ## Distributed Network
 

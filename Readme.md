@@ -233,24 +233,26 @@ tribe share --qr     # also renders a QR for the frontend (needs `brew install q
 
 `tribe share` prefers the Bonjour/mDNS hostname (`yourmac.local`) over the LAN IP — it survives DHCP lease changes, and macOS + iOS resolve it natively. The IP is shown as a fallback for clients that don't speak `.local`.
 
-**On your dev laptop** (e.g. MacBook Air working on `tribe-app` against the Mac mini's hub) — **no tribe install needed**, just two env vars:
+**On your dev laptop** (e.g. MacBook Air working on `tribe-app` against the Mac mini's hub) — **no tribe install needed**, just two env vars. Use the **LAN IP**, not the `*.local` hostname (see why below):
 
 ```bash
-# In your tribe-app checkout:
+# In your tribe-app checkout (substitute the IP `tribe share` prints):
 cat > .env.local <<EOF
-NEXT_PUBLIC_HUB_URL=http://yourmac.local:4000
-NEXT_PUBLIC_ER_SERVER_URL=http://yourmac.local:3003
+NEXT_PUBLIC_HUB_URL=http://192.168.1.6:4000
+NEXT_PUBLIC_ER_SERVER_URL=http://192.168.1.6:3003
 EOF
 pnpm dev
 # open http://localhost:3002 — local frontend, remote hub + ER
 ```
 
-`tribe share` prints these two lines exactly so you can copy-paste. If you happen to also have tribe installed on the dev laptop, `tribe link http://yourmac.local:4000` is a one-liner that writes the same file (and `tribe link --check` just probes the remote stack without writing anything).
+`tribe share` prints those two lines verbatim. If you happen to have tribe installed on the dev laptop, `tribe link http://192.168.1.6:4000` writes the same file in one command (and `tribe link --check` just probes the remote stack without writing anything).
+
+> **Why the IP and not `*.local` for browser fetches?** macOS publishes the host with both an IPv4 record and an IPv6 link-local (`fe80::…`). Chrome's `fetch()` tries the link-local first, can't route it without a zone identifier, and surfaces `ERR_ADDRESS_UNREACHABLE` instead of falling back to v4 cleanly. The IPv4 has no dual-stack hazard. CLI tools (`ping`, `curl`) handle the fallback fine, so the `*.local` hostname stays useful for those — `tribe share` keeps it visible for that purpose.
 
 **On your iPhone** (testing the web app or a native iOS app on the same Wi-Fi):
 
-- **Web app**: open `http://yourmac.local:3002` in Safari (the URL `tribe share` prints under "Open the web app")
-- **Native app**: enter `http://yourmac.local:4000` as the Hub API URL in your app's settings, and `http://yourmac.local:3003` for the ER server
+- **Web app in Safari**: `http://yourmac.local:3002` works on iOS (Safari handles the dual-stack fallback better than Chrome on desktop)
+- **Native app**: enter `http://192.168.1.6:4000` as the Hub URL — same IPv4 reasoning as above
 
 The hub's CORS is wide-open in dev (`NODE_ENV != production` and no `CORS_ORIGINS` set), so cross-origin requests from another device's frontend work out of the box.
 
@@ -266,6 +268,7 @@ tribe link --check http://yourmac.local:4000
 
 | Symptom | Cause | Fix |
 |---|---|---|
+| Browser shows `ERR_ADDRESS_UNREACHABLE` on `http://yourmac.local:4000/...` but `curl` / `ping` against the same URL work | Chrome's `fetch()` tries the IPv6 link-local (`fe80::...`) form first and can't route it without a zone identifier | Use the LAN IPv4 in `.env.local` (e.g. `http://192.168.1.6:4000`) — `tribe share` shows it. The IP has no dual-stack hazard. |
 | Hub `/health` unreachable from another laptop, but `localhost:4000/health` works on the hub machine | macOS firewall blocking incoming Node / Docker | System Settings → Network → Firewall → allow Node + Docker (or temporarily disable) |
 | Frontend `:3002` unreachable but hub + ER are reachable | `tribe-app` predates the `-H 0.0.0.0` fix in the local `pnpm dev` script | On the hub machine: `brew upgrade tribe && brew reinstall tribe`, then `tribe stop && tribe start` |
 | `*.local` doesn't resolve from a non-Apple device | mDNS / Bonjour limitation | Use the IP fallback `tribe share` prints under "Fallback IP" |

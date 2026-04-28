@@ -305,32 +305,51 @@ cmd_share() {
   local HUB_URL="http://${PREFERRED_HOST}:4000"
   local ER_URL="http://${PREFERRED_HOST}:3003"
 
+  # The .env.local snippet a remote dev frontend pastes in MUST use IPv4,
+  # not *.local. macOS publishes the host with both an IPv4 record and an
+  # IPv6 link-local fe80:: record; Chrome's fetch() tries the link-local
+  # first, can't route it without a scope identifier, and surfaces
+  # ERR_ADDRESS_UNREACHABLE without falling back to v4 cleanly. The IP
+  # has no dual-stack hazard. Keep the .local hostname elsewhere in the
+  # output for ping/curl/CLI use where Happy Eyeballs works correctly.
+  local IP_HUB_URL=""
+  local IP_ER_URL=""
+  local IP_FRONTEND_URL=""
+  if [ -n "$LOCAL_IP" ]; then
+    IP_HUB_URL="http://${LOCAL_IP}:4000"
+    IP_ER_URL="http://${LOCAL_IP}:3003"
+    IP_FRONTEND_URL="http://${LOCAL_IP}:3002"
+  fi
+
+  local ENV_HUB_URL="${IP_HUB_URL:-$HUB_URL}"
+  local ENV_ER_URL="${IP_ER_URL:-$ER_URL}"
+
   echo -e "  ${BOLD}RPC URLs (point any client at these):${NC}"
   echo -e "    ${CYAN}Hub API:${NC}    ${HUB_URL}"
   echo -e "    ${CYAN}ER server:${NC}  ${ER_URL}"
   echo ""
   echo -e "  ${BOLD}From another laptop's tribe-app checkout — paste into .env.local:${NC}"
-  echo "      NEXT_PUBLIC_HUB_URL=${HUB_URL}"
-  echo "      NEXT_PUBLIC_ER_SERVER_URL=${ER_URL}"
+  echo "      NEXT_PUBLIC_HUB_URL=${ENV_HUB_URL}"
+  echo "      NEXT_PUBLIC_ER_SERVER_URL=${ENV_ER_URL}"
   echo -e "    Then ${CYAN}pnpm dev${NC} in tribe-app/ — that's it. No tribe install needed."
-  echo -e "    (If you do have tribe installed there, ${CYAN}tribe link ${HUB_URL}${NC} writes this for you.)"
+  echo -e "    (If you do have tribe installed there, ${CYAN}tribe link ${ENV_HUB_URL}${NC} writes this for you.)"
+  if [ -n "$IP_HUB_URL" ] && [ "$ENV_HUB_URL" != "$HUB_URL" ]; then
+    echo -e "    ${YELLOW}Why the IP and not ${MDNS_HOST}?${NC} Browser fetch() trips on macOS' IPv6"
+    echo "      link-local record for the .local hostname. The IPv4 has no such issue."
+  fi
   echo ""
   echo -e "  ${BOLD}From iPhone / iPad / second browser:${NC}"
   echo -e "    Open this stack's frontend directly:"
   echo -e "      ${CYAN}${FRONTEND_URL}${NC}"
+  if [ -n "$IP_FRONTEND_URL" ]; then
+    echo -e "    Or via IP if .local doesn't resolve:"
+    echo -e "      ${CYAN}${IP_FRONTEND_URL}${NC}"
+  fi
   echo ""
   echo -e "  ${BOLD}Native iOS / Android app config:${NC}"
-  echo -e "    Hub URL        ${CYAN}${HUB_URL}${NC}"
-  echo -e "    ER server URL  ${CYAN}${ER_URL}${NC}"
+  echo -e "    Hub URL        ${CYAN}${ENV_HUB_URL}${NC}"
+  echo -e "    ER server URL  ${CYAN}${ENV_ER_URL}${NC}"
   echo ""
-
-  if [ -n "$MDNS_HOST" ] && [ -n "$LOCAL_IP" ]; then
-    echo -e "  ${BOLD}Fallback IP (use if .local doesn't resolve):${NC}"
-    echo -e "    Hub API        ${CYAN}http://${LOCAL_IP}:4000${NC}"
-    echo -e "    ER server      ${CYAN}http://${LOCAL_IP}:3003${NC}"
-    echo -e "    Frontend       ${CYAN}http://${LOCAL_IP}:3002${NC}"
-    echo ""
-  fi
 
   share_self_check
   echo ""

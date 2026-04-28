@@ -160,27 +160,29 @@ Key variables shared across services:
 
 ## Cross-device dev (same Wi-Fi)
 
-For the common solo-dev setup — protocol on a Mac mini, frontend dev on a MacBook Air, native iOS testing on iPhone, all on the same Wi-Fi — only the machine running the stack needs `tribe` installed. The dev laptop just needs its `tribe-app` checkout and two env vars:
+For the common solo-dev setup — protocol on a Mac mini, frontend dev on a MacBook Air, native iOS testing on iPhone, all on the same Wi-Fi — only the machine running the stack needs `tribe` installed. The dev laptop just needs its `tribe-app` checkout and two env vars.
+
+**Use the LAN IP, not `*.local`, for the dev frontend's env vars.** Chrome's `fetch()` trips on macOS' IPv6 link-local record for `.local` names and surfaces `ERR_ADDRESS_UNREACHABLE`; the IPv4 has no such hazard. The hostname is still fine for `ping` / `curl` / iPhone Safari.
 
 ```bash
 # On the machine running the stack (e.g. Mac mini):
 tribe start
-tribe share          # prints copy-paste URLs + an .env.local block
+tribe share          # prints copy-paste URLs (uses IPv4 for the .env.local block)
 tribe share --qr     # also renders a QR for the frontend (brew install qrencode)
 
-# On the dev laptop — paste from `tribe share` output:
+# On the dev laptop — paste from `tribe share` output (substitute the actual IP):
 cat > .env.local <<EOF
-NEXT_PUBLIC_HUB_URL=http://yourmac.local:4000
-NEXT_PUBLIC_ER_SERVER_URL=http://yourmac.local:3003
+NEXT_PUBLIC_HUB_URL=http://192.168.1.6:4000
+NEXT_PUBLIC_ER_SERVER_URL=http://192.168.1.6:3003
 EOF
 cd tribe-app && pnpm dev               # http://localhost:3002 talks to the remote hub
 
 # On iPhone (same Wi-Fi):
-#   Web app: open http://yourmac.local:3002 in Safari
-#   Native:  put http://yourmac.local:4000 in the app's Hub URL field
+#   Web app: open http://yourmac.local:3002 in Safari (Safari handles the IPv6 fallback)
+#   Native:  put http://192.168.1.6:4000 in the app's Hub URL field
 ```
 
-If you do also have `tribe` installed on the dev laptop, `tribe link http://yourmac.local:4000` writes that `.env.local` in one command, and `tribe link --check <url>` probes the remote stack without writing anything.
+If you do also have `tribe` installed on the dev laptop, `tribe link http://192.168.1.6:4000` writes that `.env.local` in one command, and `tribe link --check <url>` probes the remote stack without writing anything.
 
 `tribe share` prefers the Bonjour `*.local` hostname over the LAN IP because it survives DHCP lease changes and resolves natively on macOS + iOS. The IP is shown as a fallback for clients that don't speak `.local`. The hub's CORS is wide-open in dev (`NODE_ENV != production`), so cross-origin from another device's frontend works without configuration.
 

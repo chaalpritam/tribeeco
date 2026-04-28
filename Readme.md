@@ -214,6 +214,8 @@ tribe peers          # show connected hub peers
 tribe peer add <url> # connect to another hub
 tribe network        # show all access URLs (local, LAN, seed)
 tribe stats          # uptime, content counts, recent activity, DB size
+tribe backup [file]  # snapshot DBs + wallet + seed + media to a tar.gz
+tribe restore <file> # restore from a backup (REPLACES current data)
 tribe share [--qr]   # print URLs to hand to other devices on the same Wi-Fi
 tribe link <hub>     # point this machine's tribe-app dev server at a remote hub
 tribe reset          # wipe data and start fresh
@@ -256,6 +258,30 @@ pnpm dev
 - **Native app**: enter `http://192.168.1.6:4000` as the Hub URL — same IPv4 reasoning as above
 
 The hub's CORS is wide-open in dev (`NODE_ENV != production` and no `CORS_ORIGINS` set), so cross-origin requests from another device's frontend work out of the box.
+
+### Backup + restore (move between machines)
+
+`tribe backup` rolls every piece of state needed to relight the stack on a new machine into one tar.gz: SQL dumps of both Postgres DBs, the ER server wallet, the seed-node URL, and uploaded media.
+
+```bash
+tribe backup                                  # writes ./tribe-backup-YYYYMMDD-HHMMSS.tar.gz
+tribe backup ~/backups/today.tar.gz           # custom path
+```
+
+Source code lives in git, so it's not in the backup — only mutable state. Postgres dumps use `--clean --if-exists` so the restore step drops + recreates each table. The hub doesn't need to be stopped during backup; both DB dumps are consistent point-in-time snapshots.
+
+On the destination machine:
+
+```bash
+brew install tribe          # if not already
+scp old-mac:./tribe-backup-*.tar.gz .   # copy the file over
+tribe restore ./tribe-backup-*.tar.gz
+tribe start
+```
+
+Restore stops any running services, brings up just the database containers, pipes the SQL dumps back in, drops the wallet + seed + media into place, and tells you to run `tribe start`. Your hub-id, social graph, messages, peers, and media files all come along — for peers + remote frontends, only the host's IP/hostname changes.
+
+The backup format is versioned (`format: tribe-backup-v1` in the manifest); future tribe versions will refuse to restore an unrecognized format rather than silently corrupting state.
 
 ### Keeping the hub reachable when the screen locks
 

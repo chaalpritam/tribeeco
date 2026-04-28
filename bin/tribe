@@ -12,6 +12,8 @@
 #   tribe peer add    Connect to another hub (tribe peer add <url>)
 #   tribe network     Show all access URLs (local, LAN, seed)
 #   tribe stats       Hub uptime, content counts, recent activity, DB size
+#   tribe backup      Save DBs + wallet + seed + media to a tar.gz
+#   tribe restore     Restore from a backup file (REPLACES current data)
 #   tribe doctor      Check prerequisites and system health
 #   tribe reset       Stop services and remove volumes (fresh start)
 #   tribe version     Show version info
@@ -121,6 +123,8 @@ cmd_help() {
   echo "  peer sync    Show sync status with peers"
   echo "  network      Show all access URLs (local, LAN, seed)"
   echo "  stats        Show hub uptime, content counts, recent activity, DB size"
+  echo "  backup [path]  Save DBs + wallet + seed + media to a tar.gz"
+  echo "  restore <file> Restore from a backup file (REPLACES current data)"
   echo "  share [--qr] Print copy-paste URLs + reachability self-check"
   echo "  link <url>   Point this machine's tribe-app dev server at a remote hub"
   echo "               (use 'link --check <url>' to just probe a remote stack)"
@@ -666,6 +670,254 @@ PY
   echo ""
 }
 
+# ── Backup / restore ────────────────────────────────────────────────
+#
+# A "tribe backup" rolls every piece of state needed to relight the
+# stack on a new machine into one tar.gz: SQL dumps of both Postgres
+# DBs, the ER server wallet, the seed-node URL, and uploaded media.
+# Source code lives in git so it isn't included.
+#
+# Restore is the reverse: stop services, boot just the DBs, pipe
+# the SQL dumps in via psql, drop the wallet + seed back into place,
+# copy media. After that, `tribe start` brings the stack back up
+# pointed at restored data.
+
+# Prefer `docker compose` over `docker-compose` for inline `exec -T`
+# piping; older docker-compose versions garble stdin. Both should
+# work, but the v2 binary handles bytes more reliably.
+docker_compose() {
+  if command -v docker-compose >/dev/null 2>&1; then
+    docker-compose "$@"
+  else
+    docker compose "$@"
+  fi
+}
+
+cmd_backup() {
+  if ! docker info >/dev/null 2>&1; then
+    fail "Docker daemon not running. Start it (or 'tribe start') first."
+    return 1
+  fi
+
+  local default_name
+  default_name="tribe-backup-$(date +%Y%m%d-%H%M%S).tar.gz"
+  local out_path="${1:-$default_name}"
+  # Resolve to absolute so the cd in the tar step doesn't break it.
+  case "$out_path" in
+    /*) ;;
+    *)  out_path="$PWD/$out_path" ;;
+  esac
+
+  echo ""
+  echo -e "${BOLD}Backing up TribeEco state…${NC}"
+  echo ""
+
+  local tmp
+  tmp=$(mktemp -d)
+  local backup_dir="$tmp/tribe-backup"
+  mkdir -p "$backup_dir/postgres" "$backup_dir/wallet" "$backup_dir/config" "$backup_dir/media"
+
+  # Manifest first so a partial tarball still has metadata.
+  local hub_id="unknown"
+  if curl -sf --max-time 2 http://localhost:4000/health >/dev/null 2>&1; then
+    hub_id=$(curl -sf --max-time 2 http://localhost:4000/health 2>/dev/null \
+      | python3 -c "import sys,json; print(json.load(sys.stdin).get('hubId','unknown'))" 2>/dev/null || echo unknown)
+  fi
+  cat > "$backup_dir/manifest.json" <<EOF
+{
+  "format": "tribe-backup-v1",
+  "createdAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "tribeVersion": "$VERSION",
+  "hubId": "$hub_id",
+  "postgresImage": "postgres:16-alpine"
+}
+EOF
+
+  info "Dumping hub_db (Postgres)…"
+  if docker_compose -f "$COMPOSE_FILE" exec -T hub-db \
+       pg_dump -U tribe -d tribe_hub --clean --if-exists --no-owner --no-privileges \
+       > "$backup_dir/postgres/hub_db.sql" 2>/dev/null \
+     && [ -s "$backup_dir/postgres/hub_db.sql" ]; then
+    ok "hub_db dumped ($(du -h "$backup_dir/postgres/hub_db.sql" | cut -f1))"
+  else
+    fail "hub_db dump failed (is the hub-db container running?)"
+    rm -rf "$tmp"; return 1
+  fi
+
+  info "Dumping tribe_er (Postgres)…"
+  if docker_compose -f "$COMPOSE_FILE" exec -T er-db \
+       pg_dump -U tribe -d tribe_er --clean --if-exists --no-owner --no-privileges \
+       > "$backup_dir/postgres/tribe_er.sql" 2>/dev/null \
+     && [ -s "$backup_dir/postgres/tribe_er.sql" ]; then
+    ok "tribe_er dumped ($(du -h "$backup_dir/postgres/tribe_er.sql" | cut -f1))"
+  else
+    fail "tribe_er dump failed (is the er-db container running?)"
+    rm -rf "$tmp"; return 1
+  fi
+
+  if [ -f "$HOME/.tribe/server-wallet.json" ]; then
+    cp "$HOME/.tribe/server-wallet.json" "$backup_dir/wallet/server-wallet.json"
+    ok "ER server wallet included"
+  else
+    warn "No ~/.tribe/server-wallet.json — skipping wallet"
+  fi
+
+  if [ -f "$HOME/.tribe/seed" ]; then
+    cp "$HOME/.tribe/seed" "$backup_dir/config/seed"
+    ok "Seed-node URL included"
+  fi
+
+  local media_src="$TRIBE_HOME/tribe-hub/data/media"
+  if [ -d "$media_src" ] && [ -n "$(ls -A "$media_src" 2>/dev/null)" ]; then
+    cp -R "$media_src/." "$backup_dir/media/"
+    ok "Media files included ($(du -sh "$backup_dir/media" | cut -f1))"
+  else
+    info "No media files to include"
+  fi
+
+  info "Compressing…"
+  ( cd "$tmp" && tar czf "$out_path" tribe-backup ) || {
+    fail "tar failed"; rm -rf "$tmp"; return 1
+  }
+  rm -rf "$tmp"
+
+  echo ""
+  ok "Backup written to ${CYAN}$out_path${NC} ($(du -h "$out_path" | cut -f1))"
+  echo ""
+  info "Move this file to the new machine and run: ${CYAN}tribe restore $(basename "$out_path")${NC}"
+  echo ""
+}
+
+cmd_restore() {
+  local file="${1:-}"
+  if [ -z "$file" ]; then
+    fail "Usage: tribe restore <backup-file.tar.gz>"
+    return 1
+  fi
+  if [ ! -f "$file" ]; then
+    fail "Backup file not found: $file"
+    return 1
+  fi
+  if ! docker info >/dev/null 2>&1; then
+    if command -v colima >/dev/null 2>&1; then
+      warn "Docker not running — starting Colima…"
+      colima start || { fail "Colima failed"; return 1; }
+    else
+      fail "Docker daemon not running. Start Docker Desktop or 'colima start'."
+      return 1
+    fi
+  fi
+
+  echo ""
+  echo -e "${YELLOW}This replaces every byte of current TribeEco data with the backup contents.${NC}"
+  echo -e "${YELLOW}Existing tweets, DMs, channels, peers, and settings will be wiped.${NC}"
+  echo ""
+  read -p "    Type 'yes' to continue: " -r
+  echo ""
+  [ "$REPLY" != "yes" ] && { echo "Aborted."; return; }
+
+  local tmp
+  tmp=$(mktemp -d)
+
+  info "Extracting backup…"
+  if ! tar xzf "$file" -C "$tmp" 2>/dev/null; then
+    fail "Could not extract — is this a tribe backup?"
+    rm -rf "$tmp"; return 1
+  fi
+  local backup_dir="$tmp/tribe-backup"
+  if [ ! -f "$backup_dir/manifest.json" ]; then
+    fail "Missing manifest — not a tribe backup"
+    rm -rf "$tmp"; return 1
+  fi
+  ok "Backup looks valid"
+  echo ""
+  echo -e "  ${CYAN}Manifest:${NC}"
+  python3 -c "import json; print('\n'.join(f'    {k}: {v}' for k,v in json.load(open('$backup_dir/manifest.json')).items()))" 2>/dev/null \
+    || cat "$backup_dir/manifest.json"
+  echo ""
+
+  info "Stopping any running services…"
+  docker_compose -f "$COMPOSE_FILE" down >/dev/null 2>&1 || true
+
+  info "Bringing up databases (hub-db + er-db)…"
+  if ! docker_compose -f "$COMPOSE_FILE" up -d hub-db er-db >/dev/null 2>&1; then
+    fail "Failed to start database containers"
+    rm -rf "$tmp"; return 1
+  fi
+
+  # Wait for both DBs to accept connections. pg_dump+psql work over the
+  # docker exec channel, but psql --command "SELECT 1" needs the server
+  # to be live. 30s should be plenty even on cold first-pull.
+  info "Waiting for databases to accept connections…"
+  for svc in hub-db er-db; do
+    local ready=0
+    for _ in $(seq 1 30); do
+      if docker_compose -f "$COMPOSE_FILE" exec -T "$svc" pg_isready -U tribe >/dev/null 2>&1; then
+        ready=1; break
+      fi
+      sleep 1
+    done
+    if [ "$ready" -ne 1 ]; then
+      fail "$svc didn't become ready"
+      rm -rf "$tmp"; return 1
+    fi
+  done
+  ok "Databases ready"
+
+  if [ -f "$backup_dir/postgres/hub_db.sql" ]; then
+    info "Restoring hub_db…"
+    if docker_compose -f "$COMPOSE_FILE" exec -T hub-db \
+         psql -U tribe -d tribe_hub -v ON_ERROR_STOP=0 \
+         < "$backup_dir/postgres/hub_db.sql" >/dev/null 2>&1; then
+      ok "hub_db restored"
+    else
+      warn "hub_db restore reported errors (ON_ERROR_STOP=0 — partial restore likely succeeded)"
+    fi
+  fi
+
+  if [ -f "$backup_dir/postgres/tribe_er.sql" ]; then
+    info "Restoring tribe_er…"
+    if docker_compose -f "$COMPOSE_FILE" exec -T er-db \
+         psql -U tribe -d tribe_er -v ON_ERROR_STOP=0 \
+         < "$backup_dir/postgres/tribe_er.sql" >/dev/null 2>&1; then
+      ok "tribe_er restored"
+    else
+      warn "tribe_er restore reported errors (ON_ERROR_STOP=0 — partial restore likely succeeded)"
+    fi
+  fi
+
+  mkdir -p "$HOME/.tribe"
+  if [ -f "$backup_dir/wallet/server-wallet.json" ]; then
+    cp "$backup_dir/wallet/server-wallet.json" "$HOME/.tribe/server-wallet.json"
+    # Place the in-tree copy too so `tribe start` doesn't have to
+    # restore it from ~/.tribe/ on next boot.
+    if [ -d "$TRIBE_HOME/tribe-er-server" ]; then
+      cp "$backup_dir/wallet/server-wallet.json" \
+         "$TRIBE_HOME/tribe-er-server/server-wallet.json"
+    fi
+    ok "ER server wallet restored to ~/.tribe/server-wallet.json"
+  fi
+
+  if [ -f "$backup_dir/config/seed" ]; then
+    cp "$backup_dir/config/seed" "$HOME/.tribe/seed"
+    ok "Seed config restored"
+  fi
+
+  local media_dst="$TRIBE_HOME/tribe-hub/data/media"
+  if [ -d "$backup_dir/media" ] && [ -n "$(ls -A "$backup_dir/media" 2>/dev/null)" ]; then
+    mkdir -p "$media_dst"
+    cp -R "$backup_dir/media/." "$media_dst/"
+    ok "Media files restored to $media_dst"
+  fi
+
+  rm -rf "$tmp"
+
+  echo ""
+  ok "Restore complete."
+  info "Run ${CYAN}tribe start${NC} to bring the stack back up."
+  echo ""
+}
+
 # ── Peer management ─────────────────────────────────────────────────
 
 cmd_peer() {
@@ -1155,6 +1407,8 @@ case "$COMMAND" in
   peers)   cmd_peers "$@" ;;
   network) cmd_network "$@" ;;
   stats)   cmd_stats "$@" ;;
+  backup)  cmd_backup "$@" ;;
+  restore) cmd_restore "$@" ;;
   share)   cmd_share "$@" ;;
   link)    cmd_link "$@" ;;
   doctor)  cmd_doctor "$@" ;;

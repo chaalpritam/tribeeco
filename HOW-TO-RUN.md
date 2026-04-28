@@ -158,6 +158,31 @@ Key variables shared across services:
 
 ---
 
+## Cross-device dev (same Wi-Fi)
+
+For the common solo-dev setup — protocol on a Mac mini, frontend dev on a MacBook Air, native iOS testing on iPhone, all on the same Wi-Fi — there's a one-command-per-device flow:
+
+```bash
+# On the machine running the stack (e.g. Mac mini):
+tribe start
+tribe share          # prints copy-paste URLs preferring yourmac.local
+tribe share --qr     # also renders a QR for the frontend (brew install qrencode)
+
+# On a dev laptop pointing tribe-app at the remote hub:
+tribe link http://yourmac.local:4000     # writes tribe-app/.env.local
+cd tribe-app && pnpm dev                 # restart picks up the env
+
+# On iPhone (same Wi-Fi):
+#   Web app: open http://yourmac.local:3002 in Safari
+#   Native:  put http://yourmac.local:4000 in the app's Hub URL field
+```
+
+`tribe share` prefers the Bonjour `*.local` hostname over the LAN IP because it survives DHCP lease changes and resolves natively on macOS + iOS. The IP is shown as a fallback for clients that don't speak `.local`. The hub's CORS is wide-open in dev (`NODE_ENV != production`), so cross-origin from another device's frontend works without configuration.
+
+For "anywhere" access (e.g. iPhone over cellular), use a tunnel — that's the `## Multi-Node Deployment` flow below, which uses Cloudflare Tunnel.
+
+---
+
 ## Multi-Node Deployment (2 Macs)
 
 Run TribeEco on 2 Mac machines for high availability. If one goes down, the other keeps serving.

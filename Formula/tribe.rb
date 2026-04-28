@@ -6,6 +6,14 @@ class Tribe < Formula
   version "0.1.0"
   license "MIT"
 
+  # `brew install --HEAD tribe` (and `brew upgrade --fetch-HEAD tribe`
+  # afterwards) gives operators a self-updating install that pulls
+  # master on every upgrade. The stable URL above ships a fixed v0.1.0
+  # snapshot; for active development we recommend HEAD because it
+  # picks up CLI improvements (tribe stats, backup/restore, share/
+  # link, etc.) without manual version bumps.
+  head "https://github.com/chaalpritam/TribeEco.git", branch: "master"
+
   depends_on "node"
   depends_on "pnpm"
   depends_on "docker"
@@ -73,11 +81,16 @@ class Tribe < Formula
         tribe status       # check services
         tribe stop         # shut down
 
+      Updating:
+        brew reinstall tribe                  # re-pull master at any time
+        brew install --HEAD tribe             # track master going forward
+        brew upgrade --fetch-HEAD tribe       # afterwards, pulls latest master
+
       Colima starts automatically when you run 'tribe start'.
     EOS
   end
 
   test do
-    assert_match "tribe #{version}", shell_output("#{bin}/tribe version")
+    assert_match "tribe", shell_output("#{bin}/tribe version")
   end
 end

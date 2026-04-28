@@ -47,11 +47,26 @@ Works on MacBook, Mac Mini, Mac Pro (Intel or Apple Silicon).
 
 ```bash
 brew tap chaalpritam/tribe
+
+# Tracks the master branch — recommended for active development:
+brew install --HEAD tribe
+
+# Or pin to the v0.1.0 snapshot:
 brew install tribe
+
 tribe start
 ```
 
 Auto-installs all dependencies (Docker, Colima, Node.js, pnpm, Solana CLI), generates a server wallet, and boots all services.
+
+**Updating** depends on which install you picked:
+
+```bash
+brew upgrade --fetch-HEAD tribe   # for --HEAD installs
+brew reinstall tribe              # for stable installs (also re-pulls master)
+```
+
+`brew upgrade tribe` alone won't update a stable install because the formula's pinned `version "0.1.0"` doesn't change between commits — `brew reinstall` forces a re-fetch.
 
 ```bash
 tribe seed set ws://<SEED_IP>:4000/gossip   # connect to the network (wss:// also supported)

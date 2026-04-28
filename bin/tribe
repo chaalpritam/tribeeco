@@ -74,6 +74,8 @@ cmd_help() {
   echo "  peer add     Connect to another hub: tribe peer add <url>"
   echo "  peer sync    Show sync status with peers"
   echo "  network      Show all access URLs (local, LAN, seed)"
+  echo "  share [--qr] Print copy-paste URLs for other devices on this Wi-Fi"
+  echo "  link <url>   Point this machine's tribe-app dev server at a remote hub"
   echo "  doctor       Check prerequisites and system health"
   echo "  reset        Stop services and wipe database volumes"
   echo "  version      Show version info"
@@ -196,15 +198,24 @@ cmd_doctor() {
 
 show_network_info() {
   local LOCAL_IP="$1"
+  local MDNS_HOST="$2"
 
   echo -e "  ${BOLD}Local access:${NC}"
   echo -e "    ${CYAN}Frontend app:${NC}   http://localhost:3002"
   echo -e "    ${CYAN}Hub API:${NC}        http://localhost:4000"
   echo -e "    ${CYAN}ER server:${NC}      http://localhost:3003"
 
+  if [ -n "$MDNS_HOST" ]; then
+    echo ""
+    echo -e "  ${BOLD}LAN access via mDNS (works on macOS + iOS):${NC}"
+    echo -e "    ${CYAN}Frontend app:${NC}   http://${MDNS_HOST}:3002"
+    echo -e "    ${CYAN}Hub API:${NC}        http://${MDNS_HOST}:4000"
+    echo -e "    ${CYAN}ER server:${NC}      http://${MDNS_HOST}:3003"
+  fi
+
   if [ -n "$LOCAL_IP" ]; then
     echo ""
-    echo -e "  ${BOLD}LAN access (same network):${NC}"
+    echo -e "  ${BOLD}LAN access via IP (fallback):${NC}"
     echo -e "    ${CYAN}Frontend app:${NC}   http://${LOCAL_IP}:3002"
     echo -e "    ${CYAN}Hub API:${NC}        http://${LOCAL_IP}:4000"
     echo -e "    ${CYAN}ER server:${NC}      http://${LOCAL_IP}:3003"
@@ -225,10 +236,152 @@ show_network_info() {
   fi
 }
 
+# Resolve the Bonjour-friendly mDNS hostname (e.g. "Chaals-Mac-mini.local").
+# Empty string when not on macOS or LocalHostName isn't set. The .local suffix
+# is appended so the result is directly usable as a URL host.
+detect_mdns_host() {
+  local name=""
+  if command -v scutil >/dev/null 2>&1; then
+    name=$(scutil --get LocalHostName 2>/dev/null || true)
+  fi
+  if [ -z "$name" ]; then
+    # Linux / fallback: try `hostname -s` if avahi is in play
+    name=$(hostname -s 2>/dev/null || true)
+  fi
+  if [ -n "$name" ]; then
+    echo "${name}.local"
+  fi
+}
+
+detect_local_ip() {
+  ipconfig getifaddr en0 2>/dev/null \
+    || ipconfig getifaddr en1 2>/dev/null \
+    || hostname -I 2>/dev/null | awk '{print $1}' \
+    || echo ""
+}
+
 cmd_network() {
   echo ""
-  LOCAL_IP=$(ipconfig getifaddr en0 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || echo "")
-  show_network_info "$LOCAL_IP"
+  LOCAL_IP=$(detect_local_ip)
+  MDNS_HOST=$(detect_mdns_host)
+  show_network_info "$LOCAL_IP" "$MDNS_HOST"
+  echo ""
+}
+
+# tribe share — prints copy-paste URLs for handing to another device on the
+# same Wi-Fi (laptop running `pnpm dev` against this hub, iOS app connecting
+# to this hub's API, iPhone Safari opening the frontend, etc.).
+#
+# Prefers the mDNS hostname (`hostname.local`) since it survives DHCP lease
+# changes — IP is shown as a fallback for non-Apple clients that can't
+# resolve .local.
+cmd_share() {
+  echo ""
+  echo -e "${BOLD}Share this Tribe stack with other devices on this Wi-Fi:${NC}"
+  echo ""
+
+  local MDNS_HOST
+  MDNS_HOST=$(detect_mdns_host)
+  local LOCAL_IP
+  LOCAL_IP=$(detect_local_ip)
+
+  local PREFERRED_HOST=""
+  if [ -n "$MDNS_HOST" ]; then
+    PREFERRED_HOST="$MDNS_HOST"
+  elif [ -n "$LOCAL_IP" ]; then
+    PREFERRED_HOST="$LOCAL_IP"
+  fi
+
+  if [ -z "$PREFERRED_HOST" ]; then
+    fail "Could not detect a LAN address. Make sure you're connected to Wi-Fi."
+    echo ""
+    return 1
+  fi
+
+  local FRONTEND_URL="http://${PREFERRED_HOST}:3002"
+  local HUB_URL="http://${PREFERRED_HOST}:4000"
+  local ER_URL="http://${PREFERRED_HOST}:3003"
+
+  echo -e "  ${BOLD}Open the web app on iPhone / another laptop:${NC}"
+  echo -e "    ${CYAN}${FRONTEND_URL}${NC}"
+  echo ""
+  echo -e "  ${BOLD}Point another laptop's tribe-app dev server at this hub:${NC}"
+  echo -e "    On the other machine, run:"
+  echo -e "      ${CYAN}tribe link ${HUB_URL}${NC}"
+  echo -e "    then ${CYAN}pnpm dev${NC} in tribe-app/."
+  echo ""
+  echo -e "  ${BOLD}iOS / Android app config:${NC}"
+  echo -e "    Hub API URL    ${CYAN}${HUB_URL}${NC}"
+  echo -e "    ER server URL  ${CYAN}${ER_URL}${NC}"
+  echo ""
+
+  if [ -n "$MDNS_HOST" ] && [ -n "$LOCAL_IP" ]; then
+    echo -e "  ${BOLD}Fallback IP (use if .local doesn't resolve):${NC}"
+    echo -e "    Hub API        ${CYAN}http://${LOCAL_IP}:4000${NC}"
+    echo -e "    Frontend       ${CYAN}http://${LOCAL_IP}:3002${NC}"
+    echo ""
+  fi
+
+  if [ "$1" = "--qr" ] || [ "$1" = "-q" ]; then
+    if command -v qrencode >/dev/null 2>&1; then
+      echo -e "  ${BOLD}Scan to open the web app:${NC}"
+      qrencode -t ANSIUTF8 "$FRONTEND_URL"
+      echo ""
+    else
+      warn "qrencode not installed — install via 'brew install qrencode' for QR output"
+      echo ""
+    fi
+  fi
+}
+
+# tribe link <hub-url> — used on the dev machine (MacBook Air) to point
+# the local tribe-app at a hub running on a different machine on the same
+# Wi-Fi. Writes tribe-app/.env.local with NEXT_PUBLIC_HUB_URL +
+# NEXT_PUBLIC_ER_SERVER_URL derived from the hub URL.
+cmd_link() {
+  local hub_url="${1:-}"
+  if [ -z "$hub_url" ]; then
+    echo ""
+    fail "Usage: tribe link <hub-url>"
+    echo "  Example: tribe link http://chaals-mac-mini.local:4000"
+    echo "  (run 'tribe share' on the hub machine to get the URL)"
+    echo ""
+    exit 1
+  fi
+
+  # Strip a trailing slash and any path so we can derive sibling URLs.
+  hub_url="${hub_url%/}"
+  # Pull out scheme + host (no port) so we can swap port for ER server.
+  local host_part
+  host_part=$(echo "$hub_url" | sed -E 's|^(https?://)([^/:]+)(:[0-9]+)?.*$|\1\2|')
+  if [ -z "$host_part" ]; then
+    fail "Could not parse hub URL: $hub_url"
+    exit 1
+  fi
+  local er_url="${host_part}:3003"
+  local frontend_url="${host_part}:3002"
+
+  local app_dir="$TRIBE_HOME/tribe-app"
+  if [ ! -d "$app_dir" ]; then
+    fail "tribe-app submodule missing at $app_dir"
+    exit 1
+  fi
+
+  local env_file="$app_dir/.env.local"
+  cat > "$env_file" <<EOF
+# Generated by 'tribe link' — points this dev frontend at a remote hub on
+# the same LAN. Re-run 'tribe link <url>' to change targets.
+NEXT_PUBLIC_HUB_URL=$hub_url
+NEXT_PUBLIC_ER_SERVER_URL=$er_url
+EOF
+
+  echo ""
+  ok "Wrote $env_file"
+  echo -e "  ${CYAN}NEXT_PUBLIC_HUB_URL${NC}        $hub_url"
+  echo -e "  ${CYAN}NEXT_PUBLIC_ER_SERVER_URL${NC}  $er_url"
+  echo ""
+  info "Restart 'pnpm dev' in tribe-app/ to pick up the new env."
+  info "Then open: ${frontend_url}"
   echo ""
 }
 
@@ -577,7 +730,8 @@ cmd_start() {
   echo -e "    ${CYAN}All URLs:${NC}       tribe network"
   echo -e "    ${CYAN}Stop with:${NC}      tribe stop"
   echo ""
-  echo -e "    ${YELLOW}Tip:${NC} Connect another node with: tribe peer add <gossip-url>"
+  echo -e "    ${YELLOW}Tip:${NC} Use ${CYAN}tribe share${NC} to hand this stack to your other devices on Wi-Fi"
+  echo -e "         and ${CYAN}tribe peer add <url>${NC} to connect another node"
   echo ""
 }
 
@@ -702,6 +856,8 @@ case "$COMMAND" in
   peer)    cmd_peer "$@" ;;
   peers)   cmd_peers "$@" ;;
   network) cmd_network "$@" ;;
+  share)   cmd_share "$@" ;;
+  link)    cmd_link "$@" ;;
   doctor)  cmd_doctor "$@" ;;
   reset)   cmd_reset "$@" ;;
   version) cmd_version "$@" ;;

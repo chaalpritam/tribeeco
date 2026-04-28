@@ -35,6 +35,7 @@ fi
 
 LOG_DIR="$TRIBE_HOME/.logs"
 COMPOSE_FILE="$TRIBE_HOME/docker-compose.yml"
+KEEP_AWAKE_PID_FILE="$LOG_DIR/caffeinate.pid"
 
 # ── Colors ───────────────────────────────────────────────────────────
 RED='\033[0;31m'
@@ -48,6 +49,50 @@ ok()   { echo -e "  ${GREEN}✔${NC} $1"; }
 warn() { echo -e "  ${YELLOW}!${NC} $1"; }
 fail() { echo -e "  ${RED}✘${NC} $1"; }
 info() { echo -e "  ${CYAN}→${NC} $1"; }
+
+# ── Sleep prevention ────────────────────────────────────────────────
+#
+# When a Mac sleeps (idle, lid close, screen-lock-then-idle), Docker
+# pauses and the hub stops accepting connections — peers + remote
+# frontends suddenly see ERR_CONNECTION_REFUSED. We hold a long-lived
+# `caffeinate` process for the lifetime of `tribe start` to disable
+# idle sleep. Lid close on a laptop without AC + external display still
+# sleeps (macOS limitation); use a Mac mini, plug in a charger, or run
+# `pmset` overrides for that case.
+
+is_macos() { [ "$(uname)" = "Darwin" ]; }
+
+start_keep_awake() {
+  if ! is_macos; then return 0; fi
+  if ! command -v caffeinate >/dev/null 2>&1; then return 0; fi
+  # Already holding a caffeinate from a prior run?
+  if [ -f "$KEEP_AWAKE_PID_FILE" ]; then
+    local existing
+    existing=$(cat "$KEEP_AWAKE_PID_FILE" 2>/dev/null || echo "")
+    if [ -n "$existing" ] && kill -0 "$existing" 2>/dev/null; then
+      ok "Sleep already prevented (caffeinate PID $existing)"
+      return 0
+    fi
+  fi
+  mkdir -p "$LOG_DIR"
+  # -i: prevent system idle sleep (the one that breaks Docker)
+  # -m: prevent disk idle sleep
+  # -s: prevent system sleep (takes effect on AC; ignored on battery)
+  caffeinate -ims </dev/null >/dev/null 2>&1 &
+  local pid=$!
+  echo "$pid" > "$KEEP_AWAKE_PID_FILE"
+  ok "Sleep prevented while tribe is running (caffeinate PID $pid)"
+}
+
+stop_keep_awake() {
+  if [ ! -f "$KEEP_AWAKE_PID_FILE" ]; then return 0; fi
+  local pid
+  pid=$(cat "$KEEP_AWAKE_PID_FILE" 2>/dev/null || echo "")
+  if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+    kill "$pid" 2>/dev/null || true
+  fi
+  rm -f "$KEEP_AWAKE_PID_FILE"
+}
 
 # ── Commands ─────────────────────────────────────────────────────────
 
@@ -791,6 +836,12 @@ cmd_start() {
 
   mkdir -p "$LOG_DIR"
 
+  # Hold a caffeinate before any service starts so the system doesn't
+  # sleep mid-startup if the doctor checks took a while. Released by
+  # `tribe stop` (or the OS on shutdown / logout). On non-macOS this
+  # is a no-op.
+  start_keep_awake
+
   # 1. Docker services
   echo "[1/4] Building and starting Docker services..."
   info "Building images (first run takes a minute)..."
@@ -856,14 +907,15 @@ cmd_start() {
   done
 
   # Detect network IPs
-  LOCAL_IP=$(ipconfig getifaddr en0 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || echo "")
+  LOCAL_IP=$(detect_local_ip)
+  MDNS_HOST=$(detect_mdns_host)
 
   echo ""
   echo -e "${GREEN}╔══════════════════════════════════════════════╗${NC}"
   echo -e "${GREEN}║          TribeEco is running!                ║${NC}"
   echo -e "${GREEN}╚══════════════════════════════════════════════╝${NC}"
   echo ""
-  show_network_info "$LOCAL_IP"
+  show_network_info "$LOCAL_IP" "$MDNS_HOST"
   echo ""
   echo -e "    ${CYAN}Network:${NC}        Solana Devnet"
   echo -e "    ${CYAN}App logs:${NC}       tribe logs app"
@@ -872,6 +924,12 @@ cmd_start() {
   echo -e "    ${CYAN}All URLs:${NC}       tribe network"
   echo -e "    ${CYAN}Stop with:${NC}      tribe stop"
   echo ""
+  if is_macos; then
+    echo -e "    ${YELLOW}Sleep:${NC} idle sleep is held off via ${CYAN}caffeinate${NC} so the hub stays"
+    echo -e "           reachable when the screen locks. Lid close on a laptop without"
+    echo -e "           AC + external display will still sleep — see 'tribe help'."
+    echo ""
+  fi
   echo -e "    ${YELLOW}Tip:${NC} Use ${CYAN}tribe share${NC} to hand this stack to your other devices on Wi-Fi"
   echo -e "         and ${CYAN}tribe peer add <url>${NC} to connect another node"
   echo ""
@@ -899,6 +957,10 @@ cmd_stop() {
   # Docker
   echo "  [2/2] Stopping Docker services..."
   docker-compose -f "$COMPOSE_FILE" down
+
+  # Release the sleep-prevention hold last so the system can sleep
+  # again as soon as nothing is running.
+  stop_keep_awake
 
   echo ""
   echo -e "${GREEN}==> TribeEco stopped.${NC}"

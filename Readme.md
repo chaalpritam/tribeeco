@@ -256,6 +256,18 @@ pnpm dev
 
 The hub's CORS is wide-open in dev (`NODE_ENV != production` and no `CORS_ORIGINS` set), so cross-origin requests from another device's frontend work out of the box.
 
+### Keeping the hub reachable when the screen locks
+
+`tribe start` holds a `caffeinate -ims` process for the lifetime of the stack on macOS, blocking the system's idle sleep. So a screen lock or display sleep on the host machine doesn't take down Docker — peers and remote frontends keep working. `tribe stop` releases the hold so the system can sleep again normally.
+
+**Closing a laptop lid without AC + external display attached will still sleep**, regardless of `caffeinate`. That's a hard macOS rule. Workarounds:
+
+- Use a Mac mini (no lid)
+- Plug in power + an external display while the lid is closed
+- For laptop-only setups, close the lid only after `tribe stop`, or run [Amphetamine](https://apps.apple.com/app/amphetamine/id937984704) / `pmset -b disablesleep 1` (the latter requires sudo and survives reboots — use sparingly)
+
+System shutdown / logout / `tribe stop` all release the hold cleanly.
+
 ### Troubleshooting cross-device access
 
 If `tribe link` writes the env file but the dev frontend can't reach the remote hub, probe the remote stack from this laptop:

@@ -250,6 +250,23 @@ cd tribe-app && pnpm dev               # restart to pick up the env
 
 The hub's CORS is wide-open in dev (`NODE_ENV != production` and no `CORS_ORIGINS` set), so cross-origin requests from another device's frontend work out of the box.
 
+### Troubleshooting cross-device access
+
+If `tribe link` writes the env file but the dev frontend can't reach the remote hub, probe the remote stack from this laptop:
+
+```bash
+tribe link --check http://yourmac.local:4000
+```
+
+`tribe share` on the hub machine includes a self-check telling you whether each service is bound to all interfaces (vs `127.0.0.1` only) and flags the macOS firewall if it's enabled. Common failures:
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Hub `/health` unreachable from another laptop, but `localhost:4000/health` works on the hub machine | macOS firewall blocking incoming Node / Docker | System Settings → Network → Firewall → allow Node + Docker (or temporarily disable) |
+| Frontend `:3002` unreachable but hub + ER are reachable | `tribe-app` predates the `-H 0.0.0.0` fix in the local `pnpm dev` script | On the hub machine: `brew upgrade tribe && brew reinstall tribe`, then `tribe stop && tribe start` |
+| `*.local` doesn't resolve from a non-Apple device | mDNS / Bonjour limitation | Use the IP fallback `tribe share` prints under "Fallback IP" |
+| Every submodule warns "Skipping submodule…" on a fresh `brew install` | Old formula version (pre-fix) | `brew upgrade tribe` — the formula now inits submodules in install, not post_install |
+
 ## Distributed Network
 
 TribeEco nodes discover each other through a **seed node** — a lightweight hub running on a VPS with a public IP. Home nodes auto-connect to the seed on startup, and the gossip protocol handles peer discovery and message sync.

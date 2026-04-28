@@ -74,8 +74,9 @@ cmd_help() {
   echo "  peer add     Connect to another hub: tribe peer add <url>"
   echo "  peer sync    Show sync status with peers"
   echo "  network      Show all access URLs (local, LAN, seed)"
-  echo "  share [--qr] Print copy-paste URLs for other devices on this Wi-Fi"
+  echo "  share [--qr] Print copy-paste URLs + reachability self-check"
   echo "  link <url>   Point this machine's tribe-app dev server at a remote hub"
+  echo "               (use 'link --check <url>' to just probe a remote stack)"
   echo "  doctor       Check prerequisites and system health"
   echo "  reset        Stop services and wipe database volumes"
   echo "  version      Show version info"
@@ -269,10 +270,12 @@ cmd_network() {
 }
 
 # tribe share — prints copy-paste URLs for handing to another device on the
-# same Wi-Fi (laptop running `pnpm dev` against this hub, iOS app connecting
-# to this hub's API, iPhone Safari opening the frontend, etc.).
+# same Wi-Fi. The hub + ER server are framed as "RPC URLs" because that's
+# the typical use case: another laptop runs its own frontend dev server,
+# points it at this hub via `tribe link`, and gets a fast local UI talking
+# to a remote backend.
 #
-# Prefers the mDNS hostname (`hostname.local`) since it survives DHCP lease
+# Prefers the Bonjour hostname (`*.local`) since it survives DHCP lease
 # changes — IP is shown as a fallback for non-Apple clients that can't
 # resolve .local.
 cmd_share() {
@@ -302,25 +305,37 @@ cmd_share() {
   local HUB_URL="http://${PREFERRED_HOST}:4000"
   local ER_URL="http://${PREFERRED_HOST}:3003"
 
-  echo -e "  ${BOLD}Open the web app on iPhone / another laptop:${NC}"
-  echo -e "    ${CYAN}${FRONTEND_URL}${NC}"
+  echo -e "  ${BOLD}RPC URLs (point any client at these):${NC}"
+  echo -e "    ${CYAN}Hub API:${NC}    ${HUB_URL}"
+  echo -e "    ${CYAN}ER server:${NC}  ${ER_URL}"
   echo ""
-  echo -e "  ${BOLD}Point another laptop's tribe-app dev server at this hub:${NC}"
-  echo -e "    On the other machine, run:"
+  echo -e "  ${BOLD}From another laptop on this Wi-Fi:${NC}"
+  echo -e "    Build & run the frontend locally against this hub —"
+  echo -e "    your dev server stays fast, only the data is remote."
+  echo ""
   echo -e "      ${CYAN}tribe link ${HUB_URL}${NC}"
-  echo -e "    then ${CYAN}pnpm dev${NC} in tribe-app/."
+  echo -e "      ${CYAN}cd tribe-app && pnpm dev${NC}"
+  echo -e "      open ${CYAN}http://localhost:3002${NC}"
   echo ""
-  echo -e "  ${BOLD}iOS / Android app config:${NC}"
-  echo -e "    Hub API URL    ${CYAN}${HUB_URL}${NC}"
+  echo -e "  ${BOLD}From iPhone / iPad / second browser:${NC}"
+  echo -e "    Open this stack's frontend directly:"
+  echo -e "      ${CYAN}${FRONTEND_URL}${NC}"
+  echo ""
+  echo -e "  ${BOLD}Native iOS / Android app config:${NC}"
+  echo -e "    Hub URL        ${CYAN}${HUB_URL}${NC}"
   echo -e "    ER server URL  ${CYAN}${ER_URL}${NC}"
   echo ""
 
   if [ -n "$MDNS_HOST" ] && [ -n "$LOCAL_IP" ]; then
     echo -e "  ${BOLD}Fallback IP (use if .local doesn't resolve):${NC}"
     echo -e "    Hub API        ${CYAN}http://${LOCAL_IP}:4000${NC}"
+    echo -e "    ER server      ${CYAN}http://${LOCAL_IP}:3003${NC}"
     echo -e "    Frontend       ${CYAN}http://${LOCAL_IP}:3002${NC}"
     echo ""
   fi
+
+  share_self_check
+  echo ""
 
   if [ "$1" = "--qr" ] || [ "$1" = "-q" ]; then
     if command -v qrencode >/dev/null 2>&1; then
@@ -334,16 +349,71 @@ cmd_share() {
   fi
 }
 
+# Verify each service is actually listening on 0.0.0.0 (not just localhost).
+# A service bound to 127.0.0.1 is unreachable from another device even if
+# the URL looks right. Most common cause: stale brew install with an old
+# tribe-app submodule whose dev script lacks `-H 0.0.0.0`.
+share_self_check() {
+  echo -e "  ${BOLD}Reachability check:${NC}"
+  share_check_port "Hub API" 4000
+  share_check_port "ER server" 3003
+  share_check_port "Frontend" 3002
+
+  if [ "$(uname)" = "Darwin" ]; then
+    local fw
+    fw=$(/usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate 2>/dev/null | grep -c "enabled" || echo 0)
+    if [ "$fw" -gt 0 ]; then
+      warn "macOS firewall is on — if remote access fails, allow Node and Docker in System Settings → Network → Firewall."
+    fi
+  fi
+}
+
+# Returns the addresses a TCP port is listening on. Empty if nothing's
+# listening on it.
+share_listening_addrs() {
+  local port="$1"
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -nP -iTCP:"$port" -sTCP:LISTEN 2>/dev/null | awk 'NR>1 {print $9}' | sort -u
+  fi
+}
+
+share_check_port() {
+  local label="$1"
+  local port="$2"
+  local addrs
+  addrs=$(share_listening_addrs "$port")
+  if [ -z "$addrs" ]; then
+    fail "${label} not running on port ${port} — start it with 'tribe start'."
+    return
+  fi
+  if echo "$addrs" | grep -qE '(\*|0\.0\.0\.0|\[::\]):'"$port"; then
+    ok "${label} on :${port} bound to all interfaces"
+  elif echo "$addrs" | grep -q "127.0.0.1:${port}"; then
+    fail "${label} on :${port} is bound to localhost only — other devices can't reach it."
+    echo "      Likely a stale tribe-app/. Update with 'brew upgrade tribe' (or"
+    echo "      'git -C \$TRIBE_HOME submodule update --remote tribe-app') and restart."
+  else
+    warn "${label} on :${port} bound to: $(echo "$addrs" | tr '\n' ' ')"
+  fi
+}
+
 # tribe link <hub-url> — used on the dev machine (MacBook Air) to point
 # the local tribe-app at a hub running on a different machine on the same
 # Wi-Fi. Writes tribe-app/.env.local with NEXT_PUBLIC_HUB_URL +
 # NEXT_PUBLIC_ER_SERVER_URL derived from the hub URL.
 cmd_link() {
+  local mode="link"
+  if [ "${1:-}" = "--check" ] || [ "${1:-}" = "-c" ]; then
+    mode="check"
+    shift
+  fi
+
   local hub_url="${1:-}"
   if [ -z "$hub_url" ]; then
     echo ""
-    fail "Usage: tribe link <hub-url>"
+    fail "Usage: tribe link [--check] <hub-url>"
     echo "  Example: tribe link http://chaals-mac-mini.local:4000"
+    echo "           tribe link --check http://chaals-mac-mini.local:4000"
     echo "  (run 'tribe share' on the hub machine to get the URL)"
     echo ""
     exit 1
@@ -360,6 +430,11 @@ cmd_link() {
   fi
   local er_url="${host_part}:3003"
   local frontend_url="${host_part}:3002"
+
+  if [ "$mode" = "check" ]; then
+    link_check "$hub_url" "$er_url" "$frontend_url"
+    return
+  fi
 
   local app_dir="$TRIBE_HOME/tribe-app"
   if [ ! -d "$app_dir" ]; then
@@ -380,9 +455,59 @@ EOF
   echo -e "  ${CYAN}NEXT_PUBLIC_HUB_URL${NC}        $hub_url"
   echo -e "  ${CYAN}NEXT_PUBLIC_ER_SERVER_URL${NC}  $er_url"
   echo ""
-  info "Restart 'pnpm dev' in tribe-app/ to pick up the new env."
-  info "Then open: ${frontend_url}"
+
+  # Quick reachability check before the user wastes time restarting pnpm dev.
+  link_check "$hub_url" "$er_url" "$frontend_url"
   echo ""
+  info "Restart 'pnpm dev' in tribe-app/ to pick up the new env."
+  info "Then open: http://localhost:3002 — it talks to the remote hub."
+  echo ""
+}
+
+# Probe a remote stack to see whether it's actually reachable. Useful
+# both before linking (to catch firewall/.local issues early) and after,
+# so the user knows whether the next pnpm dev will work. Runs three
+# checks: hub /health, ER server /health (best-effort), frontend root.
+link_check() {
+  local hub_url="$1"
+  local er_url="$2"
+  local frontend_url="$3"
+
+  echo -e "  ${BOLD}Reachability check from this laptop:${NC}"
+  LINK_PROBE_UNREACHABLE=0
+  link_probe "Hub /health      " "${hub_url}/health"
+  link_probe "ER server /health" "${er_url}/health"
+  link_probe "Frontend         " "${frontend_url}"
+  if [ "$LINK_PROBE_UNREACHABLE" -gt 0 ]; then
+    echo ""
+    echo "      → Make sure 'tribe start' is running on the hub machine,"
+    echo "        that you're on the same Wi-Fi, and that *.local resolves"
+    echo "        (try the IP fallback from 'tribe share' on the hub side)."
+    echo "      → On macOS, allow incoming connections for Node and Docker"
+    echo "        in System Settings → Network → Firewall."
+  fi
+}
+
+link_probe() {
+  local label="$1"
+  local url="$2"
+  local code
+  # curl writes "000" on connection failure; `|| true` keeps `set -e` happy
+  # without appending a second 000 from a fallback echo.
+  code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 4 "$url" 2>/dev/null) || true
+  [ -z "$code" ] && code="000"
+  case "$code" in
+    200|301|302|307|308)
+      ok "${label}  ${url}  (${code})"
+      ;;
+    000)
+      fail "${label}  ${url}  unreachable"
+      LINK_PROBE_UNREACHABLE=$((LINK_PROBE_UNREACHABLE + 1))
+      ;;
+    *)
+      warn "${label}  ${url}  unexpected ${code}"
+      ;;
+  esac
 }
 
 # ── Peer management ─────────────────────────────────────────────────

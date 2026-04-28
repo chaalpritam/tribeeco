@@ -233,15 +233,19 @@ tribe share --qr     # also renders a QR for the frontend (needs `brew install q
 
 `tribe share` prefers the Bonjour/mDNS hostname (`yourmac.local`) over the LAN IP — it survives DHCP lease changes, and macOS + iOS resolve it natively. The IP is shown as a fallback for clients that don't speak `.local`.
 
-**On your dev laptop** (e.g. MacBook Air running `tribe-app` against the Mac mini's hub):
+**On your dev laptop** (e.g. MacBook Air working on `tribe-app` against the Mac mini's hub) — **no tribe install needed**, just two env vars:
 
 ```bash
-tribe link http://yourmac.local:4000   # writes tribe-app/.env.local
-cd tribe-app && pnpm dev               # restart to pick up the env
-# now open http://localhost:3002 — it talks to the Mac mini's hub + ER
+# In your tribe-app checkout:
+cat > .env.local <<EOF
+NEXT_PUBLIC_HUB_URL=http://yourmac.local:4000
+NEXT_PUBLIC_ER_SERVER_URL=http://yourmac.local:3003
+EOF
+pnpm dev
+# open http://localhost:3002 — local frontend, remote hub + ER
 ```
 
-`tribe link` writes `NEXT_PUBLIC_HUB_URL` and derives `NEXT_PUBLIC_ER_SERVER_URL` from the same host (port 3003). Re-run with a different URL to switch targets.
+`tribe share` prints these two lines exactly so you can copy-paste. If you happen to also have tribe installed on the dev laptop, `tribe link http://yourmac.local:4000` is a one-liner that writes the same file (and `tribe link --check` just probes the remote stack without writing anything).
 
 **On your iPhone** (testing the web app or a native iOS app on the same Wi-Fi):
 

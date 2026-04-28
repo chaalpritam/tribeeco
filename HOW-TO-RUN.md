@@ -160,22 +160,27 @@ Key variables shared across services:
 
 ## Cross-device dev (same Wi-Fi)
 
-For the common solo-dev setup — protocol on a Mac mini, frontend dev on a MacBook Air, native iOS testing on iPhone, all on the same Wi-Fi — there's a one-command-per-device flow:
+For the common solo-dev setup — protocol on a Mac mini, frontend dev on a MacBook Air, native iOS testing on iPhone, all on the same Wi-Fi — only the machine running the stack needs `tribe` installed. The dev laptop just needs its `tribe-app` checkout and two env vars:
 
 ```bash
 # On the machine running the stack (e.g. Mac mini):
 tribe start
-tribe share          # prints copy-paste URLs preferring yourmac.local
+tribe share          # prints copy-paste URLs + an .env.local block
 tribe share --qr     # also renders a QR for the frontend (brew install qrencode)
 
-# On a dev laptop pointing tribe-app at the remote hub:
-tribe link http://yourmac.local:4000     # writes tribe-app/.env.local
-cd tribe-app && pnpm dev                 # restart picks up the env
+# On the dev laptop — paste from `tribe share` output:
+cat > .env.local <<EOF
+NEXT_PUBLIC_HUB_URL=http://yourmac.local:4000
+NEXT_PUBLIC_ER_SERVER_URL=http://yourmac.local:3003
+EOF
+cd tribe-app && pnpm dev               # http://localhost:3002 talks to the remote hub
 
 # On iPhone (same Wi-Fi):
 #   Web app: open http://yourmac.local:3002 in Safari
 #   Native:  put http://yourmac.local:4000 in the app's Hub URL field
 ```
+
+If you do also have `tribe` installed on the dev laptop, `tribe link http://yourmac.local:4000` writes that `.env.local` in one command, and `tribe link --check <url>` probes the remote stack without writing anything.
 
 `tribe share` prefers the Bonjour `*.local` hostname over the LAN IP because it survives DHCP lease changes and resolves natively on macOS + iOS. The IP is shown as a fallback for clients that don't speak `.local`. The hub's CORS is wide-open in dev (`NODE_ENV != production`), so cross-origin from another device's frontend works without configuration.
 

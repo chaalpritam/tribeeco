@@ -15,6 +15,24 @@ class Tribe < Formula
   depends_on "tailscale" => :optional
 
   def install
+    # Brew's GitDownloadStrategy stages a working tree but doesn't auto-init
+    # submodules — every submodule directory in the stage is empty. Doing
+    # `git submodule update` here, in the staging dir (which is itself a git
+    # checkout), means `libexec.install Dir["*"]` below copies populated
+    # submodule trees instead of empty placeholders.
+    #
+    # GIT_TERMINAL_PROMPT=0 prevents the install from hanging if a submodule
+    # remote is private or unreachable, and we init each submodule
+    # individually so one failure warns + continues instead of aborting.
+    ENV["GIT_TERMINAL_PROMPT"] = "0"
+    submodules = `git config -f .gitmodules --get-regexp '^submodule\\..*\\.path$' 2>/dev/null`
+                   .lines.map { |l| l.split(/\s+/, 2)[1].to_s.strip }.reject(&:empty?)
+    submodules.each do |path|
+      unless quiet_system "git", "submodule", "update", "--init", "--recursive", "--depth", "1", path
+        opoo "Skipping submodule '#{path}' (clone failed — likely private or unavailable)."
+      end
+    end
+
     libexec.install Dir["*"]
     libexec.install ".gitmodules"
     libexec.install ".gitignore"
@@ -28,25 +46,18 @@ class Tribe < Formula
   end
 
   def post_install
-    # Avoid hanging on a credential prompt if a submodule's remote is private
-    ENV["GIT_TERMINAL_PROMPT"] = "0"
-
-    # Init each submodule separately so a private/unavailable one doesn't abort the install
-    submodules = `git -C "#{libexec}" config -f .gitmodules --get-regexp '^submodule\\..*\\.path$'`
-                   .lines.map { |l| l.split(/\s+/, 2)[1].to_s.strip }.reject(&:empty?)
-    submodules.each do |path|
-      unless quiet_system "git", "-C", libexec.to_s, "submodule", "update", "--init", "--recursive", path
-        opoo "Skipping submodule '#{path}' (clone failed — likely private or unavailable)."
-      end
+    # Install frontend dependencies (skip if submodule was unavailable)
+    if File.exist?("#{libexec}/tribe-app/package.json")
+      system "pnpm", "install", "--dir", "#{libexec}/tribe-app"
+    else
+      opoo "Skipping pnpm install — tribe-app submodule wasn't cloned."
     end
-
-    # Install frontend dependencies
-    system "pnpm", "install", "--dir", "#{libexec}/tribe-app"
 
     # Restore wallet from persistent location if it exists
     persistent_wallet = File.expand_path("~/.tribe/server-wallet.json")
     install_wallet = "#{libexec}/tribe-er-server/server-wallet.json"
-    if File.exist?(persistent_wallet) && !File.exist?(install_wallet)
+    er_dir = File.dirname(install_wallet)
+    if File.exist?(persistent_wallet) && File.directory?(er_dir) && !File.exist?(install_wallet)
       ohai "Restoring ER server wallet from ~/.tribe/"
       FileUtils.cp(persistent_wallet, install_wallet)
     end

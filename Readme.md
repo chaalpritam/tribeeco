@@ -213,6 +213,7 @@ tribe seed set <url> # set seed node URL (ws:// or wss://) for network auto-conn
 tribe peers          # show connected hub peers
 tribe peer add <url> # connect to another hub
 tribe network        # show all access URLs (local, LAN, seed)
+tribe stats          # uptime, content counts, recent activity, DB size
 tribe share [--qr]   # print URLs to hand to other devices on the same Wi-Fi
 tribe link <hub>     # point this machine's tribe-app dev server at a remote hub
 tribe reset          # wipe data and start fresh

@@ -11,6 +11,7 @@
 #   tribe peers       Show connected hub peers and sync status
 #   tribe peer add    Connect to another hub (tribe peer add <url>)
 #   tribe network     Show all access URLs (local, LAN, seed)
+#   tribe stats       Hub uptime, content counts, recent activity, DB size
 #   tribe doctor      Check prerequisites and system health
 #   tribe reset       Stop services and remove volumes (fresh start)
 #   tribe version     Show version info
@@ -119,6 +120,7 @@ cmd_help() {
   echo "  peer add     Connect to another hub: tribe peer add <url>"
   echo "  peer sync    Show sync status with peers"
   echo "  network      Show all access URLs (local, LAN, seed)"
+  echo "  stats        Show hub uptime, content counts, recent activity, DB size"
   echo "  share [--qr] Print copy-paste URLs + reachability self-check"
   echo "  link <url>   Point this machine's tribe-app dev server at a remote hub"
   echo "               (use 'link --check <url>' to just probe a remote stack)"
@@ -570,6 +572,98 @@ link_probe() {
       warn "${label}  ${url}  unexpected ${code}"
       ;;
   esac
+}
+
+# ── Stats ───────────────────────────────────────────────────────────
+
+# tribe stats — operator snapshot pulled from the local hub. Hits
+# /v1/stats for the bundled DB-backed view and renders a compact
+# summary. For Prometheus-style time series, scrape /metrics directly.
+cmd_stats() {
+  local hub_url="${TRIBE_HUB_URL:-http://localhost:4000}"
+  echo ""
+  echo -e "${BOLD}Tribe hub stats${NC} ${CYAN}(${hub_url})${NC}"
+  echo ""
+
+  local response
+  response=$(curl -sS --max-time 5 "${hub_url}/v1/stats" 2>/dev/null) || response=""
+  if [ -z "$response" ]; then
+    fail "Hub not reachable at ${hub_url} — is 'tribe start' running?"
+    echo ""
+    return 1
+  fi
+
+  # Render via python3 — already a dep elsewhere in this CLI (peers,
+  # status). Keeps the bash readable and avoids jq as a hard dep.
+  # Pass JSON via env var because `python3 - <<HEREDOC` would have the
+  # heredoc fighting the pipe for stdin.
+  TRIBE_STATS_JSON="$response" python3 - <<'PY'
+import json, os
+
+d = json.loads(os.environ["TRIBE_STATS_JSON"])
+
+def fmt_uptime(s):
+    s = int(s or 0)
+    days, s = divmod(s, 86400)
+    hrs,  s = divmod(s, 3600)
+    mins, secs = divmod(s, 60)
+    parts = []
+    if days: parts.append(f"{days}d")
+    if hrs:  parts.append(f"{hrs}h")
+    if mins: parts.append(f"{mins}m")
+    if not parts: parts.append(f"{secs}s")
+    return " ".join(parts)
+
+def cyan(s): return f"\033[0;36m{s}\033[0m"
+def bold(s): return f"\033[1m{s}\033[0m"
+def gray(s): return f"\033[90m{s}\033[0m"
+
+print(f"  {cyan('Hub ID:')}     {d.get('hubId','?')}")
+print(f"  {cyan('Uptime:')}     {fmt_uptime(d.get('uptimeSeconds'))}")
+print(f"  {cyan('Peers:')}      {d.get('peers', 0)} connected")
+storage = d.get('storage') or {}
+print(f"  {cyan('DB size:')}    {storage.get('databasePretty','unknown')}")
+
+recent = d.get('recent') or {}
+print()
+print(bold("  Recent activity"))
+print(f"    Messages   last 1h: {recent.get('messagesLastHour',0):>5}   last 24h: {recent.get('messagesLast24h',0):>5}")
+print(f"    DMs        last 1h: {recent.get('dmsLastHour',0):>5}   last 24h: {recent.get('dmsLast24h',0):>5}")
+
+counts = d.get('counts') or {}
+print()
+print(bold("  Stored content"))
+groups = [
+    ("Tweets / reactions", "messages"),
+    ("TIDs (users)",       "tids"),
+    ("Channels",           "channels"),
+    ("Profile fields",     "user_data"),
+    ("Direct messages",    "dm_messages"),
+    ("Polls",              "polls"),
+    ("Poll votes",         "poll_votes"),
+    ("Events",             "events"),
+    ("Event RSVPs",        "event_rsvps"),
+    ("Tasks",              "tasks"),
+    ("Crowdfunds",         "crowdfunds"),
+    ("Crowdfund pledges",  "crowdfund_pledges"),
+    ("Tips",               "tips"),
+    ("Bookmarks",          "bookmarks"),
+    ("Follows",            "social_graph"),
+    ("Signed envelopes",   "signed_envelopes"),
+]
+for label, key in groups:
+    val = counts.get(key)
+    rendered = "—" if val is None else str(val)
+    print(f"    {label:<22} {rendered:>10}")
+
+ts = d.get('timestamp')
+if ts:
+    print()
+    print(gray(f"  As of {ts}"))
+PY
+  echo ""
+  info "Deeper Prometheus counters: ${CYAN}curl ${hub_url}/metrics${NC}"
+  echo ""
 }
 
 # ── Peer management ─────────────────────────────────────────────────
@@ -1060,6 +1154,7 @@ case "$COMMAND" in
   peer)    cmd_peer "$@" ;;
   peers)   cmd_peers "$@" ;;
   network) cmd_network "$@" ;;
+  stats)   cmd_stats "$@" ;;
   share)   cmd_share "$@" ;;
   link)    cmd_link "$@" ;;
   doctor)  cmd_doctor "$@" ;;

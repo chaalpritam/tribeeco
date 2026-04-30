@@ -33,8 +33,14 @@ class Tribe < Formula
     # remote is private or unreachable, and we init each submodule
     # individually so one failure warns + continues instead of aborting.
     ENV["GIT_TERMINAL_PROMPT"] = "0"
+    # tribe-app is intentionally excluded — it ships as the separate
+    # `tribe-app` formula (`brew install tribe-app`), so an operator
+    # running just a hub doesn't pay for cloning + pnpm-installing a
+    # ~250MB Next.js demo they don't need.
     submodules = `git config -f .gitmodules --get-regexp '^submodule\\..*\\.path$' 2>/dev/null`
-                   .lines.map { |l| l.split(/\s+/, 2)[1].to_s.strip }.reject(&:empty?)
+                   .lines.map { |l| l.split(/\s+/, 2)[1].to_s.strip }
+                   .reject(&:empty?)
+                   .reject { |p| p == "tribe-app" }
     submodules.each do |path|
       unless quiet_system "git", "submodule", "update", "--init", "--recursive", "--depth", "1", path
         opoo "Skipping submodule '#{path}' (clone failed — likely private or unavailable)."
@@ -54,13 +60,6 @@ class Tribe < Formula
   end
 
   def post_install
-    # Install frontend dependencies (skip if submodule was unavailable)
-    if File.exist?("#{libexec}/tribe-app/package.json")
-      system "pnpm", "install", "--dir", "#{libexec}/tribe-app"
-    else
-      opoo "Skipping pnpm install — tribe-app submodule wasn't cloned."
-    end
-
     # Restore wallet from persistent location if it exists
     persistent_wallet = File.expand_path("~/.tribe/server-wallet.json")
     install_wallet = "#{libexec}/tribe-er-server/server-wallet.json"
@@ -77,9 +76,13 @@ class Tribe < Formula
 
       Quick start:
         tribe doctor       # verify prerequisites
-        tribe start        # boot everything
+        tribe start        # boot everything (hub + ER + databases)
         tribe status       # check services
         tribe stop         # shut down
+
+      Demo frontend (optional):
+        brew install tribe-app    # adds the Next.js demo UI on :3002
+        tribe-app                  # boot it
 
       Updating:
         brew reinstall tribe                  # re-pull master at any time

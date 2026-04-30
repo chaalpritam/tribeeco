@@ -3,10 +3,10 @@
 # tribe - CLI for managing the TribeEco decentralized social protocol
 #
 # Usage:
-#   tribe start       Start all services (databases, backend, frontend)
+#   tribe start       Start hub + ER server + databases
 #   tribe stop        Stop all services
 #   tribe status      Show status of all services
-#   tribe logs [svc]  Tail logs (hub | er-server | app | all)
+#   tribe logs [svc]  Tail logs (hub | er-server | all)
 #   tribe seed        Show/set seed node for network auto-connect
 #   tribe peers       Show connected hub peers and sync status
 #   tribe peer add    Connect to another hub (tribe peer add <url>)
@@ -113,10 +113,10 @@ cmd_help() {
   echo "  tribe <command> [options]"
   echo ""
   echo -e "${BOLD}COMMANDS${NC}"
-  echo "  start        Start all services (databases, backend, frontend)"
+  echo "  start        Start hub + ER server + databases"
   echo "  stop         Stop all running services"
   echo "  status       Show status of all services"
-  echo "  logs [svc]   Tail logs: hub, er-server, app, or all (default)"
+  echo "  logs [svc]   Tail logs: hub, er-server, or all (default)"
   echo "  seed         Show/set seed node for network auto-connect"
   echo "  peers        Show connected hub peers"
   echo "  peer add     Connect to another hub: tribe peer add <url>"
@@ -125,18 +125,18 @@ cmd_help() {
   echo "  stats        Show hub uptime, content counts, recent activity, DB size"
   echo "  backup [path]  Save DBs + wallet + seed + media to a tar.gz"
   echo "  restore <file> Restore from a backup file (REPLACES current data)"
-  echo "  share [--qr] Print copy-paste URLs + reachability self-check"
-  echo "  link <url>   Point this machine's tribe-app dev server at a remote hub"
-  echo "               (use 'link --check <url>' to just probe a remote stack)"
+  echo "  share        Print copy-paste URLs + reachability self-check"
   echo "  doctor       Check prerequisites and system health"
   echo "  reset        Stop services and wipe database volumes"
   echo "  version      Show version info"
   echo "  help         Show this help message"
   echo ""
   echo -e "${BOLD}SERVICES${NC}"
-  echo "  Frontend app     http://localhost:3002"
   echo "  Hub API          http://localhost:4000"
   echo "  ER server        http://localhost:3003"
+  echo ""
+  echo -e "${BOLD}DEMO FRONTEND${NC}  (optional, separate formula)"
+  echo "  brew install tribe-app && tribe-app   # http://localhost:3002"
   echo ""
   echo -e "${BOLD}EXAMPLES${NC}"
   echo "  tribe start          # boot everything"
@@ -194,7 +194,7 @@ cmd_doctor() {
   fi
 
   # Project files
-  for svc in tribe-app tribe-er-server tribe-hub tribe-protocol tribe-sdk; do
+  for svc in tribe-er-server tribe-hub tribe-protocol tribe-sdk; do
     if [ -d "$TRIBE_HOME/$svc" ]; then
       ok "$svc directory present"
     else
@@ -229,7 +229,7 @@ cmd_doctor() {
   # Ports
   echo ""
   echo -e "${CYAN}  Port availability:${NC}"
-  for entry in "3002:frontend" "3003:er-server" "4000:hub" "5435:er-db" "5436:hub-db"; do
+  for entry in "3003:er-server" "4000:hub" "5435:er-db" "5436:hub-db"; do
     PORT="${entry%%:*}"
     NAME="${entry##*:}"
     if lsof -i :"$PORT" -sTCP:LISTEN &>/dev/null 2>&1; then
@@ -253,14 +253,12 @@ show_network_info() {
   local MDNS_HOST="$2"
 
   echo -e "  ${BOLD}Local access:${NC}"
-  echo -e "    ${CYAN}Frontend app:${NC}   http://localhost:3002"
   echo -e "    ${CYAN}Hub API:${NC}        http://localhost:4000"
   echo -e "    ${CYAN}ER server:${NC}      http://localhost:3003"
 
   if [ -n "$MDNS_HOST" ]; then
     echo ""
     echo -e "  ${BOLD}LAN access via mDNS (works on macOS + iOS):${NC}"
-    echo -e "    ${CYAN}Frontend app:${NC}   http://${MDNS_HOST}:3002"
     echo -e "    ${CYAN}Hub API:${NC}        http://${MDNS_HOST}:4000"
     echo -e "    ${CYAN}ER server:${NC}      http://${MDNS_HOST}:3003"
   fi
@@ -268,7 +266,6 @@ show_network_info() {
   if [ -n "$LOCAL_IP" ]; then
     echo ""
     echo -e "  ${BOLD}LAN access via IP (fallback):${NC}"
-    echo -e "    ${CYAN}Frontend app:${NC}   http://${LOCAL_IP}:3002"
     echo -e "    ${CYAN}Hub API:${NC}        http://${LOCAL_IP}:4000"
     echo -e "    ${CYAN}ER server:${NC}      http://${LOCAL_IP}:3003"
   fi
@@ -320,11 +317,10 @@ cmd_network() {
   echo ""
 }
 
-# tribe share — prints copy-paste URLs for handing to another device on the
-# same Wi-Fi. The hub + ER server are framed as "RPC URLs" because that's
-# the typical use case: another laptop runs its own frontend dev server,
-# points it at this hub via `tribe link`, and gets a fast local UI talking
-# to a remote backend.
+# tribe share — prints copy-paste URLs for handing this hub to another
+# device on the same Wi-Fi. The hub + ER server are framed as "RPC URLs"
+# because that's the typical use case: a separate machine runs the
+# tribe-app demo frontend (or a native client) and points at this hub.
 #
 # Prefers the Bonjour hostname (`*.local`) since it survives DHCP lease
 # changes — IP is shown as a fallback for non-Apple clients that can't
@@ -352,12 +348,11 @@ cmd_share() {
     return 1
   fi
 
-  local FRONTEND_URL="http://${PREFERRED_HOST}:3002"
   local HUB_URL="http://${PREFERRED_HOST}:4000"
   local ER_URL="http://${PREFERRED_HOST}:3003"
 
-  # The .env.local snippet a remote dev frontend pastes in MUST use IPv4,
-  # not *.local. macOS publishes the host with both an IPv4 record and an
+  # The URL another machine's browser pastes in MUST use IPv4, not
+  # *.local. macOS publishes the host with both an IPv4 record and an
   # IPv6 link-local fe80:: record; Chrome's fetch() tries the link-local
   # first, can't route it without a scope identifier, and surfaces
   # ERR_ADDRESS_UNREACHABLE without falling back to v4 cleanly. The IP
@@ -365,11 +360,9 @@ cmd_share() {
   # output for ping/curl/CLI use where Happy Eyeballs works correctly.
   local IP_HUB_URL=""
   local IP_ER_URL=""
-  local IP_FRONTEND_URL=""
   if [ -n "$LOCAL_IP" ]; then
     IP_HUB_URL="http://${LOCAL_IP}:4000"
     IP_ER_URL="http://${LOCAL_IP}:3003"
-    IP_FRONTEND_URL="http://${LOCAL_IP}:3002"
   fi
 
   local ENV_HUB_URL="${IP_HUB_URL:-$HUB_URL}"
@@ -379,22 +372,16 @@ cmd_share() {
   echo -e "    ${CYAN}Hub API:${NC}    ${HUB_URL}"
   echo -e "    ${CYAN}ER server:${NC}  ${ER_URL}"
   echo ""
-  echo -e "  ${BOLD}From another laptop's tribe-app checkout — paste into .env.local:${NC}"
+  echo -e "  ${BOLD}From another laptop with tribe-app installed:${NC}"
+  echo -e "      ${CYAN}tribe-app link ${ENV_HUB_URL}${NC}"
+  echo -e "      ${CYAN}tribe-app${NC}                                     # http://localhost:3002"
+  echo ""
+  echo -e "  ${BOLD}From a tribe-app checkout (no install) — paste into .env.local:${NC}"
   echo "      NEXT_PUBLIC_HUB_URL=${ENV_HUB_URL}"
   echo "      NEXT_PUBLIC_ER_SERVER_URL=${ENV_ER_URL}"
-  echo -e "    Then ${CYAN}pnpm dev${NC} in tribe-app/ — that's it. No tribe install needed."
-  echo -e "    (If you do have tribe installed there, ${CYAN}tribe link ${ENV_HUB_URL}${NC} writes this for you.)"
   if [ -n "$IP_HUB_URL" ] && [ "$ENV_HUB_URL" != "$HUB_URL" ]; then
     echo -e "    ${YELLOW}Why the IP and not ${MDNS_HOST}?${NC} Browser fetch() trips on macOS' IPv6"
     echo "      link-local record for the .local hostname. The IPv4 has no such issue."
-  fi
-  echo ""
-  echo -e "  ${BOLD}From iPhone / iPad / second browser:${NC}"
-  echo -e "    Open this stack's frontend directly:"
-  echo -e "      ${CYAN}${FRONTEND_URL}${NC}"
-  if [ -n "$IP_FRONTEND_URL" ]; then
-    echo -e "    Or via IP if .local doesn't resolve:"
-    echo -e "      ${CYAN}${IP_FRONTEND_URL}${NC}"
   fi
   echo ""
   echo -e "  ${BOLD}Native iOS / Android app config:${NC}"
@@ -404,28 +391,15 @@ cmd_share() {
 
   share_self_check
   echo ""
-
-  if [ "$1" = "--qr" ] || [ "$1" = "-q" ]; then
-    if command -v qrencode >/dev/null 2>&1; then
-      echo -e "  ${BOLD}Scan to open the web app:${NC}"
-      qrencode -t ANSIUTF8 "$FRONTEND_URL"
-      echo ""
-    else
-      warn "qrencode not installed — install via 'brew install qrencode' for QR output"
-      echo ""
-    fi
-  fi
 }
 
 # Verify each service is actually listening on 0.0.0.0 (not just localhost).
 # A service bound to 127.0.0.1 is unreachable from another device even if
-# the URL looks right. Most common cause: stale brew install with an old
-# tribe-app submodule whose dev script lacks `-H 0.0.0.0`.
+# the URL looks right.
 share_self_check() {
   echo -e "  ${BOLD}Reachability check:${NC}"
   share_check_port "Hub API" 4000
   share_check_port "ER server" 3003
-  share_check_port "Frontend" 3002
 
   if [ "$(uname)" = "Darwin" ]; then
     local fw
@@ -458,124 +432,9 @@ share_check_port() {
     ok "${label} on :${port} bound to all interfaces"
   elif echo "$addrs" | grep -q "127.0.0.1:${port}"; then
     fail "${label} on :${port} is bound to localhost only — other devices can't reach it."
-    echo "      Likely a stale tribe-app/. Update with 'brew upgrade tribe' (or"
-    echo "      'git -C \$TRIBE_HOME submodule update --remote tribe-app') and restart."
   else
     warn "${label} on :${port} bound to: $(echo "$addrs" | tr '\n' ' ')"
   fi
-}
-
-# tribe link <hub-url> — used on the dev machine (MacBook Air) to point
-# the local tribe-app at a hub running on a different machine on the same
-# Wi-Fi. Writes tribe-app/.env.local with NEXT_PUBLIC_HUB_URL +
-# NEXT_PUBLIC_ER_SERVER_URL derived from the hub URL.
-cmd_link() {
-  local mode="link"
-  if [ "${1:-}" = "--check" ] || [ "${1:-}" = "-c" ]; then
-    mode="check"
-    shift
-  fi
-
-  local hub_url="${1:-}"
-  if [ -z "$hub_url" ]; then
-    echo ""
-    fail "Usage: tribe link [--check] <hub-url>"
-    echo "  Example: tribe link http://chaals-mac-mini.local:4000"
-    echo "           tribe link --check http://chaals-mac-mini.local:4000"
-    echo "  (run 'tribe share' on the hub machine to get the URL)"
-    echo ""
-    exit 1
-  fi
-
-  # Strip a trailing slash and any path so we can derive sibling URLs.
-  hub_url="${hub_url%/}"
-  # Pull out scheme + host (no port) so we can swap port for ER server.
-  local host_part
-  host_part=$(echo "$hub_url" | sed -E 's|^(https?://)([^/:]+)(:[0-9]+)?.*$|\1\2|')
-  if [ -z "$host_part" ]; then
-    fail "Could not parse hub URL: $hub_url"
-    exit 1
-  fi
-  local er_url="${host_part}:3003"
-  local frontend_url="${host_part}:3002"
-
-  if [ "$mode" = "check" ]; then
-    link_check "$hub_url" "$er_url" "$frontend_url"
-    return
-  fi
-
-  local app_dir="$TRIBE_HOME/tribe-app"
-  if [ ! -d "$app_dir" ]; then
-    fail "tribe-app submodule missing at $app_dir"
-    exit 1
-  fi
-
-  local env_file="$app_dir/.env.local"
-  cat > "$env_file" <<EOF
-# Generated by 'tribe link' — points this dev frontend at a remote hub on
-# the same LAN. Re-run 'tribe link <url>' to change targets.
-NEXT_PUBLIC_HUB_URL=$hub_url
-NEXT_PUBLIC_ER_SERVER_URL=$er_url
-EOF
-
-  echo ""
-  ok "Wrote $env_file"
-  echo -e "  ${CYAN}NEXT_PUBLIC_HUB_URL${NC}        $hub_url"
-  echo -e "  ${CYAN}NEXT_PUBLIC_ER_SERVER_URL${NC}  $er_url"
-  echo ""
-
-  # Quick reachability check before the user wastes time restarting pnpm dev.
-  link_check "$hub_url" "$er_url" "$frontend_url"
-  echo ""
-  info "Restart 'pnpm dev' in tribe-app/ to pick up the new env."
-  info "Then open: http://localhost:3002 — it talks to the remote hub."
-  echo ""
-}
-
-# Probe a remote stack to see whether it's actually reachable. Useful
-# both before linking (to catch firewall/.local issues early) and after,
-# so the user knows whether the next pnpm dev will work. Runs three
-# checks: hub /health, ER server /health (best-effort), frontend root.
-link_check() {
-  local hub_url="$1"
-  local er_url="$2"
-  local frontend_url="$3"
-
-  echo -e "  ${BOLD}Reachability check from this laptop:${NC}"
-  LINK_PROBE_UNREACHABLE=0
-  link_probe "Hub /health      " "${hub_url}/health"
-  link_probe "ER server /health" "${er_url}/health"
-  link_probe "Frontend         " "${frontend_url}"
-  if [ "$LINK_PROBE_UNREACHABLE" -gt 0 ]; then
-    echo ""
-    echo "      → Make sure 'tribe start' is running on the hub machine,"
-    echo "        that you're on the same Wi-Fi, and that *.local resolves"
-    echo "        (try the IP fallback from 'tribe share' on the hub side)."
-    echo "      → On macOS, allow incoming connections for Node and Docker"
-    echo "        in System Settings → Network → Firewall."
-  fi
-}
-
-link_probe() {
-  local label="$1"
-  local url="$2"
-  local code
-  # curl writes "000" on connection failure; `|| true` keeps `set -e` happy
-  # without appending a second 000 from a fallback echo.
-  code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 4 "$url" 2>/dev/null) || true
-  [ -z "$code" ] && code="000"
-  case "$code" in
-    200|301|302|307|308)
-      ok "${label}  ${url}  (${code})"
-      ;;
-    000)
-      fail "${label}  ${url}  unreachable"
-      LINK_PROBE_UNREACHABLE=$((LINK_PROBE_UNREACHABLE + 1))
-      ;;
-    *)
-      warn "${label}  ${url}  unexpected ${code}"
-      ;;
-  esac
 }
 
 # ── Stats ───────────────────────────────────────────────────────────
@@ -1114,15 +973,6 @@ cmd_start() {
     ok "pnpm $(pnpm --version)"
   fi
 
-  # Dependencies
-  if [ ! -d "$TRIBE_HOME/tribe-app/node_modules" ]; then
-    warn "Installing tribe-app dependencies..."
-    (cd "$TRIBE_HOME/tribe-app" && pnpm install) || { fail "pnpm install failed"; MISSING=1; }
-    ok "tribe-app dependencies installed"
-  else
-    ok "tribe-app dependencies present"
-  fi
-
   # Required directories
   for svc in tribe-er-server tribe-hub; do
     if [ ! -d "$TRIBE_HOME/$svc" ]; then
@@ -1160,7 +1010,7 @@ cmd_start() {
   fi
 
   # Ports
-  for entry in "3002:frontend" "3003:er-server" "4000:hub" "5435:er-db" "5436:hub-db"; do
+  for entry in "3003:er-server" "4000:hub" "5435:er-db" "5436:hub-db"; do
     PORT="${entry%%:*}"
     NAME="${entry##*:}"
     if lsof -i :"$PORT" -sTCP:LISTEN &>/dev/null 2>&1; then
@@ -1189,14 +1039,14 @@ cmd_start() {
   start_keep_awake
 
   # 1. Docker services
-  echo "[1/4] Building and starting Docker services..."
+  echo "[1/3] Building and starting Docker services..."
   info "Building images (first run takes a minute)..."
   docker-compose -f "$COMPOSE_FILE" up -d --build 2>&1 | while read line; do
     echo "       $line"
   done
 
   # 2. Database health
-  echo "[2/4] Waiting for databases..."
+  echo "[2/3] Waiting for databases..."
   for i in $(seq 1 30); do
     ALL_HEALTHY=1
     for svc in er-db hub-db; do
@@ -1211,7 +1061,7 @@ cmd_start() {
   ok "Databases ready"
 
   # 3. Backend health
-  echo "[3/4] Waiting for backend services..."
+  echo "[3/3] Waiting for backend services..."
   wait_for_service() {
     local name=$1 url=$2 max_wait=$3
     for i in $(seq 1 $max_wait); do
@@ -1241,17 +1091,6 @@ cmd_start() {
     fi
   fi
 
-  # 4. Frontend
-  echo "[4/4] Starting frontend app (Next.js on port 3002)..."
-  cd "$TRIBE_HOME/tribe-app"
-  pnpm dev -p 3002 > "$LOG_DIR/tribe-app.log" 2>&1 &
-  echo $! > "$LOG_DIR/tribe-app.pid"
-
-  for i in $(seq 1 20); do
-    if curl -sf "http://localhost:3002" > /dev/null 2>&1; then break; fi
-    sleep 1
-  done
-
   # Detect network IPs
   LOCAL_IP=$(detect_local_ip)
   MDNS_HOST=$(detect_mdns_host)
@@ -1264,8 +1103,8 @@ cmd_start() {
   show_network_info "$LOCAL_IP" "$MDNS_HOST"
   echo ""
   echo -e "    ${CYAN}Network:${NC}        Solana Devnet"
-  echo -e "    ${CYAN}App logs:${NC}       tribe logs app"
-  echo -e "    ${CYAN}Docker logs:${NC}    tribe logs hub"
+  echo -e "    ${CYAN}Hub logs:${NC}       tribe logs hub"
+  echo -e "    ${CYAN}ER logs:${NC}        tribe logs er-server"
   echo -e "    ${CYAN}Peers:${NC}          tribe peers"
   echo -e "    ${CYAN}All URLs:${NC}       tribe network"
   echo -e "    ${CYAN}Stop with:${NC}      tribe stop"
@@ -1276,6 +1115,7 @@ cmd_start() {
     echo -e "           AC + external display will still sleep — see 'tribe help'."
     echo ""
   fi
+  echo -e "    ${YELLOW}Demo UI?${NC} ${CYAN}brew install tribe-app && tribe-app${NC} (separate formula)"
   echo -e "    ${YELLOW}Tip:${NC} Use ${CYAN}tribe share${NC} to hand this stack to your other devices on Wi-Fi"
   echo -e "         and ${CYAN}tribe peer add <url>${NC} to connect another node"
   echo ""
@@ -1285,23 +1125,8 @@ cmd_stop() {
   echo ""
   echo -e "${CYAN}==> Stopping TribeEco...${NC}"
 
-  # Frontend
-  if [ -f "$LOG_DIR/tribe-app.pid" ]; then
-    PID=$(cat "$LOG_DIR/tribe-app.pid")
-    if kill -0 "$PID" 2>/dev/null; then
-      echo "  [1/2] Stopping frontend app (PID $PID)..."
-      kill "$PID" 2>/dev/null
-      wait "$PID" 2>/dev/null || true
-    else
-      echo "  [1/2] Frontend app already stopped."
-    fi
-    rm -f "$LOG_DIR/tribe-app.pid"
-  else
-    echo "  [1/2] No frontend PID found."
-  fi
-
   # Docker
-  echo "  [2/2] Stopping Docker services..."
+  echo "  Stopping Docker services..."
   docker-compose -f "$COMPOSE_FILE" down
 
   # Release the sleep-prevention hold last so the system can sleep
@@ -1317,17 +1142,6 @@ cmd_status() {
   echo ""
   echo -e "${BOLD}TribeEco service status${NC}"
   echo ""
-
-  # Frontend
-  if [ -f "$LOG_DIR/tribe-app.pid" ] && kill -0 "$(cat "$LOG_DIR/tribe-app.pid")" 2>/dev/null; then
-    if curl -sf "http://localhost:3002" > /dev/null 2>&1; then
-      ok "Frontend app       running   http://localhost:3002"
-    else
-      warn "Frontend app       starting  http://localhost:3002"
-    fi
-  else
-    fail "Frontend app       stopped"
-  fi
 
   # Docker services
   for entry in "hub:Hub API:4000" "er-server:ER server:3003" "er-db:ER database:5435" "hub-db:Hub database:5436"; do
@@ -1350,13 +1164,6 @@ cmd_status() {
 cmd_logs() {
   local target="${1:-all}"
   case "$target" in
-    app|frontend)
-      if [ -f "$LOG_DIR/tribe-app.log" ]; then
-        tail -f "$LOG_DIR/tribe-app.log"
-      else
-        echo "No app logs found. Is the frontend running?"
-      fi
-      ;;
     hub)
       docker-compose -f "$COMPOSE_FILE" logs -f hub
       ;;
@@ -1368,7 +1175,7 @@ cmd_logs() {
       ;;
     *)
       echo "Unknown service: $target"
-      echo "Usage: tribe logs [app|hub|er-server|all]"
+      echo "Usage: tribe logs [hub|er-server|all]"
       exit 1
       ;;
   esac
@@ -1410,7 +1217,6 @@ case "$COMMAND" in
   backup)  cmd_backup "$@" ;;
   restore) cmd_restore "$@" ;;
   share)   cmd_share "$@" ;;
-  link)    cmd_link "$@" ;;
   doctor)  cmd_doctor "$@" ;;
   reset)   cmd_reset "$@" ;;
   version) cmd_version "$@" ;;

@@ -19,6 +19,7 @@ The main CLI script at `bin/tribe` manages the hub + ER stack (no frontend). Key
 - `tribe stop` — Stops Docker services.
 - `tribe doctor` — Checks all prerequisites. Auto-generates wallet if missing.
 - `tribe seed set <url>` — Sets seed node URL in `~/.tribe/seed`. Auto-connects on next start.
+- `tribe hub-id` — Show / set / reset this hub's gossip identifier (persisted at `~/.tribe/hub-id`). First `tribe start` auto-generates a unique random id so two laptops don't collide as `hub-primary`.
 - `tribe peer add <url>` — POSTs to `http://localhost:4000/v1/peers` to connect hubs.
 - `tribe peers` — Shows connected peers via `GET /v1/peers`.
 - `tribe network` — Shows local, LAN, and seed node URLs.
@@ -69,6 +70,7 @@ Formula changes must be pushed to BOTH the `homebrew-tap` submodule AND the main
 ## Persistent State (~/.tribe/)
 
 - `~/.tribe/server-wallet.json` — ER server Solana keypair. Survives reinstalls.
+- `~/.tribe/hub-id` — This hub's gossip identifier (e.g. `hub-laptop1` or `hub-a3f9b1`). Auto-generated as a unique random value on first `tribe start` so two laptops installed from the same brew formula don't both come up as `hub-primary` and refuse to peer. Read by the CLI and exported as `HUB_ID` for `docker-compose.yml`'s `${HUB_ID:-hub-primary}` substitution. Manage with `tribe hub-id [show | set <name> | reset]`.
 - `~/.tribe/seed` — Seed node WebSocket URL. One line, e.g. `ws://1.2.3.4:4000/gossip`.
 - `~/.tribe/tribe-app.env` — `NEXT_PUBLIC_HUB_URL` + `NEXT_PUBLIC_ER_SERVER_URL` for the `tribe-app` demo UI. Written by `tribe-app link <hub-url>`, sourced on every `tribe-app` run.
 

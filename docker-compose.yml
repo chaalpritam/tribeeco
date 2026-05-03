@@ -70,7 +70,12 @@ services:
       - "4000:4000"
     environment:
       PORT: 4000
-      HUB_ID: hub-primary
+      # Hub id is the gossip-protocol primary key — every peer in the
+      # mesh must have a distinct one. The CLI persists a unique id at
+      # ~/.tribe/hub-id and exports it as HUB_ID before invoking
+      # docker-compose, so the literal default below only takes effect
+      # for raw `docker-compose up` without the CLI wrapper.
+      HUB_ID: ${HUB_ID:-hub-primary}
       SOLANA_RPC_URL: https://api.devnet.solana.com
       SOLANA_WS_URL: wss://api.devnet.solana.com
       DATABASE_URL: postgresql://tribe:tribe@hub-db:5432/tribe_hub

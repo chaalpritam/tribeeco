@@ -153,7 +153,7 @@ cmd_help() {
   echo "  seed         Show/set seed node for network auto-connect"
   echo "  peers        Show connected hub peers"
   echo "  peer add     Connect to another hub: tribe peer add <url>"
-  echo "  peer sync    Show sync status with peers"
+  echo "  sync         Show coverage table; --peer <id>|all to force catch-up"
   echo "  hub-id       Show / set / reset this hub's gossip identifier"
   echo "  network      Show all access URLs (local, LAN, seed)"
   echo "  stats        Show hub uptime, content counts, recent activity, DB size"
@@ -873,29 +873,13 @@ for p in peers:
       echo ""
       ;;
     sync)
-      echo ""
-      echo -e "${BOLD}Sync status:${NC}"
-      echo ""
-      RESPONSE=$(curl -sf http://localhost:4000/v1/sync/status 2>&1)
-      if [ $? -eq 0 ]; then
-        echo "$RESPONSE" | python3 -c "
-import sys, json
-data = json.load(sys.stdin)
-syncs = data.get('syncStates', data) if isinstance(data, dict) else data
-if not syncs:
-    print('  No sync history yet.')
-for s in (syncs if isinstance(syncs, list) else []):
-    peer = s.get('peer_hub_id', 'unknown')
-    last = s.get('last_sync_at', 'never')
-    print(f'  {peer}: last synced {last}')
-" 2>/dev/null || echo "  $RESPONSE"
-      else
-        fail "Failed to fetch sync status. Is the hub running?"
-      fi
-      echo ""
+      # Backward-compat shim — prefer `tribe sync` for the richer table
+      # and `--peer` flags.
+      cmd_sync status
       ;;
     *)
-      echo "Usage: tribe peer [add <url> | list | sync]"
+      echo "Usage: tribe peer [add <url> | list]"
+      echo "       tribe sync     # coverage table + hard-sync triggers"
       ;;
   esac
 }
@@ -961,6 +945,150 @@ cmd_hub_id() {
       echo "  tribe hub-id set my-mac   # rename to my-mac"
       echo "  tribe hub-id reset        # randomize"
       exit 1
+      ;;
+  esac
+}
+
+# ── Sync coverage + hard-sync trigger ───────────────────────────────
+#
+# `tribe sync`              → table of peers with coverage %, last sync, etc.
+# `tribe sync --peer <id>`  → POSTs /v1/sync/trigger with {peer:<id>}
+# `tribe sync --peer all`   → POSTs /v1/sync/trigger with {peer:"all"}
+#
+# Coverage is roughly (our messages + DMs) / (peer messages + DMs),
+# capped at 100. It is a heuristic — a fully-synced peer should sit at
+# 100%; if you see a peer stuck below 100 the trigger sub-cmd nudges
+# them past it without waiting for organic gossip.
+cmd_sync() {
+  local target_peer=""
+  local subcmd="${1:-status}"
+
+  # Parse `--peer <id>` (with status as the implicit default).
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --peer)
+        target_peer="$2"
+        subcmd="trigger"
+        shift 2
+        ;;
+      status|"")
+        subcmd="status"
+        shift
+        ;;
+      *)
+        echo "Usage: tribe sync [status | --peer <hub-id> | --peer all]"
+        exit 1
+        ;;
+    esac
+  done
+
+  if ! curl -sf --max-time 2 http://localhost:4000/health >/dev/null 2>&1; then
+    fail "Hub not reachable at http://localhost:4000 — is 'tribe start' running?"
+    exit 1
+  fi
+
+  case "$subcmd" in
+    status)
+      echo ""
+      echo -e "${BOLD}Sync coverage${NC}"
+      echo ""
+      RESPONSE=$(curl -sf http://localhost:4000/v1/sync/status 2>&1)
+      if [ $? -ne 0 ]; then
+        fail "Failed to fetch sync status."
+        exit 1
+      fi
+      echo "$RESPONSE" | python3 -c "
+import sys, json, datetime
+data = json.load(sys.stdin)
+hub_id = data.get('hubId', 'unknown')
+own_total = data.get('ownTotal', 0)
+own_msgs = data.get('ownMessages', 0)
+own_dms = data.get('ownDms', 0)
+states = data.get('syncStates', [])
+print(f'  This hub: \033[1m{hub_id}\033[0m')
+print(f'  Local store: {own_total} total ({own_msgs} messages + {own_dms} DMs)')
+print()
+if not states:
+    print('  No peers known yet. Add one with: tribe peer add <ws-url>')
+    sys.exit(0)
+def relative(iso):
+    if not iso: return 'never'
+    try:
+        ts = datetime.datetime.fromisoformat(iso.replace('Z','+00:00'))
+        delta = datetime.datetime.now(datetime.timezone.utc) - ts
+        s = max(0, int(delta.total_seconds()))
+        if s < 60: return f'{s}s ago'
+        if s < 3600: return f'{s//60}m ago'
+        if s < 86400: return f'{s//3600}h ago'
+        return f'{s//86400}d ago'
+    except Exception:
+        return iso
+print(f'  {\"STATUS\":<2}  {\"HUB ID\":<20} {\"COVERAGE\":<11} {\"PEER TOTAL\":<11} {\"FROM PEER\":<10} {\"LAST SYNC\":<12}')
+print(f'  {\"-\"*2}  {\"-\"*20} {\"-\"*11} {\"-\"*11} {\"-\"*10} {\"-\"*12}')
+for s in states:
+    peer = (s.get('peerHubId') or 'unknown')[:20]
+    connected = s.get('connected', False)
+    dot = '\033[0;32m●\033[0m' if connected else '\033[0;31m●\033[0m'
+    cov = s.get('coverage')
+    cov_str = f'{cov}%' if cov is not None else '?'
+    pt = s.get('peerTotal')
+    pt_str = str(pt) if pt is not None else '?'
+    rx = s.get('messageCount', 0)
+    last = relative(s.get('lastSyncAt'))
+    print(f'  {dot}   {peer:<20} {cov_str:<11} {pt_str:<11} {rx:<10} {last:<12}')
+print()
+print('  Coverage = local store / peer total (capped at 100%). \"?\" means')
+print('  the peer\\'s /health was unreachable from this host.')
+print()
+print('  Force a catch-up:')
+print('    tribe sync --peer <hub-id>   # one peer')
+print('    tribe sync --peer all        # every connected peer')
+" 2>/dev/null || echo "  $RESPONSE"
+      echo ""
+      ;;
+    trigger)
+      if [ -z "$target_peer" ]; then
+        echo "Usage: tribe sync --peer <hub-id>"
+        echo "       tribe sync --peer all"
+        exit 1
+      fi
+      echo ""
+      if [ "$target_peer" = "all" ]; then
+        info "Triggering hard-sync to all connected peers (last 30 days)…"
+        BODY='{"peer":"all"}'
+      else
+        info "Triggering hard-sync to $target_peer (last 30 days)…"
+        BODY="{\"peer\":\"$target_peer\"}"
+      fi
+      RESPONSE=$(curl -sS -X POST http://localhost:4000/v1/sync/trigger \
+        -H "Content-Type: application/json" \
+        -d "$BODY" 2>&1)
+      if [ $? -ne 0 ]; then
+        fail "Trigger request failed."
+        exit 1
+      fi
+      # Surface a 404 from the hub (peer not connected) cleanly.
+      if echo "$RESPONSE" | grep -q '"error"'; then
+        fail "Hub rejected the trigger:"
+        echo "  $RESPONSE" | python3 -m json.tool 2>/dev/null || echo "  $RESPONSE"
+        exit 1
+      fi
+      ok "Trigger sent."
+      echo "$RESPONSE" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+sent = data.get('sentTo', [])
+target = data.get('target', '?')
+since = data.get('since', '?')
+if sent:
+    print(f'  Hashes blasted to: {\", \".join(sent)}')
+else:
+    print(f'  Nothing to send — local store has no messages newer than {since}')
+print(f'  Window: since {since} (target: {target})')
+print()
+print('  Run \"tribe sync\" again in a few seconds to see the coverage move.')
+" 2>/dev/null || echo "  $RESPONSE"
+      echo ""
       ;;
   esac
 }
@@ -1375,6 +1503,7 @@ case "$COMMAND" in
   peer)    cmd_peer "$@" ;;
   peers)   cmd_peers "$@" ;;
   hub-id)  cmd_hub_id "$@" ;;
+  sync)    cmd_sync "$@" ;;
   network) cmd_network "$@" ;;
   stats)   cmd_stats "$@" ;;
   backup)  cmd_backup "$@" ;;

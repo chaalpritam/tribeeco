@@ -22,6 +22,8 @@ The main CLI script at `bin/tribe` manages the hub + ER stack (no frontend). Key
 - `tribe hub-id` — Show / set / reset this hub's gossip identifier (persisted at `~/.tribe/hub-id`). First `tribe start` auto-generates a unique random id so two laptops don't collide as `hub-primary`.
 - `tribe peer add <url>` — POSTs to `http://localhost:4000/v1/peers` to connect hubs.
 - `tribe peers` — Shows connected peers via `GET /v1/peers`.
+- `tribe sync` — Coverage table: `(local store) / (peer total)` per peer plus from-peer message count and last-sync time. `?` means the peer's `/health` was unreachable from this host.
+- `tribe sync --peer <hub-id>` / `tribe sync --peer all` — Force a hard catch-up. POSTs `/v1/sync/trigger` which calls `broadcastHaveSince` to blast a 30-day "have" frame at one peer or every connected peer, so a freshly-added hub doesn't have to wait for organic 5s gossip ticks to catch up.
 - `tribe network` — Shows local, LAN, and seed node URLs.
 - `tribe share` — Print copy-paste hub/ER URLs + reachability self-check for handing the stack to other devices on Wi-Fi.
 

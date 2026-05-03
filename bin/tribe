@@ -17,6 +17,7 @@
 #   tribe restore     Restore from a backup file (REPLACES current data)
 #   tribe doctor      Check prerequisites and system health
 #   tribe reset       Stop services and remove volumes (fresh start)
+#                     `--hard` also wipes ~/.tribe/hub-id and seed
 #   tribe version     Show version info
 #   tribe help        Show this help message
 
@@ -161,6 +162,8 @@ cmd_help() {
   echo "  share        Print copy-paste URLs + reachability self-check"
   echo "  doctor       Check prerequisites and system health"
   echo "  reset        Stop services and wipe database volumes"
+  echo "               (add --hard to also wipe ~/.tribe/hub-id + seed for"
+  echo "               a true fresh-install state, ready to peer cleanly)"
   echo "  version      Show version info"
   echo "  help         Show this help message"
   echo ""
@@ -1282,20 +1285,79 @@ cmd_logs() {
 }
 
 cmd_reset() {
+  # Flags: --hard also wipes per-machine identity (hub-id + seed)
+  # so the laptop comes back up looking like a brand-new install
+  # for peering purposes. The Solana keypair at
+  # ~/.tribe/server-wallet.json is ALWAYS preserved — it's the
+  # ER's on-chain identity; re-keying it orphans any SOL it holds.
+  local hard=0
+  local assume_yes=0
+  for arg in "$@"; do
+    case "$arg" in
+      --hard) hard=1 ;;
+      --yes|-y) assume_yes=1 ;;
+      *)
+        echo "Unknown flag: $arg"
+        echo "Usage: tribe reset [--hard] [--yes]"
+        exit 1
+        ;;
+    esac
+  done
+
   echo ""
-  echo -e "${YELLOW}==> This will stop all services and delete database volumes.${NC}"
-  read -p "    Continue? [y/N] " -n 1 -r
+  echo -e "${YELLOW}==> Reset will delete:${NC}"
+  echo "    • Hub database volume (every tweet, reaction, bookmark, dm, follow"
+  echo "      indexed locally — gossiped data will re-sync from peers)"
+  echo "    • ER server database volume (pending follow ops, settlement state)"
+  if [ "$hard" -eq 1 ]; then
+    echo -e "    • ${BOLD}~/.tribe/hub-id${NC}  (a new random id is generated on next start)"
+    echo -e "    • ${BOLD}~/.tribe/seed${NC}    (auto-connect seed URL — clear it to fully detach)"
+  fi
   echo ""
-  if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    echo "Aborted."
-    exit 0
+  echo -e "${GREEN}==> Reset will PRESERVE:${NC}"
+  echo "    • ~/.tribe/server-wallet.json (ER Solana keypair — keep your SOL)"
+  if [ "$hard" -ne 1 ]; then
+    echo "    • ~/.tribe/hub-id  (use --hard to also wipe this)"
+    echo "    • ~/.tribe/seed    (use --hard to also wipe this)"
+  fi
+  echo "    • ~/.tribe/tribe-app.env (demo UI hub URL)"
+  echo ""
+
+  if [ "$assume_yes" -ne 1 ]; then
+    read -p "    Continue? [y/N] " -n 1 -r
+    echo ""
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+      echo "Aborted."
+      exit 0
+    fi
   fi
 
   cmd_stop
   echo "  Removing Docker volumes..."
   docker-compose -f "$COMPOSE_FILE" down -v
+
+  if [ "$hard" -eq 1 ]; then
+    if [ -f "$HUB_ID_FILE" ]; then
+      rm -f "$HUB_ID_FILE"
+      ok "Removed $HUB_ID_FILE"
+    fi
+    local seed_file="$HOME/.tribe/seed"
+    if [ -f "$seed_file" ]; then
+      rm -f "$seed_file"
+      ok "Removed $seed_file"
+    fi
+  fi
+
   echo ""
-  echo -e "${GREEN}==> Reset complete. Run 'tribe start' for a fresh start.${NC}"
+  echo -e "${GREEN}==> Reset complete.${NC}"
+  if [ "$hard" -eq 1 ]; then
+    echo "    Next 'tribe start' will look like a fresh install — a new random"
+    echo "    hub id will be generated. Use 'tribe hub-id set <name>' to give"
+    echo "    it a friendlier name, then peer it with 'tribe peer add <url>'."
+  else
+    echo "    Run 'tribe start' to bring the stack back up. Hub id and seed"
+    echo "    are preserved; pass --hard to also wipe those."
+  fi
   echo ""
 }
 

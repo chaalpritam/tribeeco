@@ -74,6 +74,11 @@ services:
       SOLANA_RPC_URL: https://api.devnet.solana.com
       SOLANA_WS_URL: wss://api.devnet.solana.com
       DATABASE_URL: postgresql://tribe:tribe@hub-db:5432/tribe_hub
+      # In-cluster URL for the ER sequencer. /v1/user/:tid asks the ER
+      # for in-flight follow / unfollow deltas so freshly-clicked
+      # follows show up before L1 settlement. Best-effort; an empty
+      # value or a down ER server falls back to social_graph alone.
+      ER_SERVER_URL: http://er-server:3003
       MEDIA_DIR: /app/data/media
       TID_REGISTRY_PROGRAM_ID: 4BSmJmRGQWKgioP9DG2bUuRS9U3V6soRauU7Nv6yGvHD
       APP_KEY_REGISTRY_PROGRAM_ID: 5LtbFUeAoXWRovGpyWnRJhiCS62XsTYKVErT9kPpv4hN
@@ -84,6 +89,8 @@ services:
       - hub-media:/app/data/media
     depends_on:
       hub-db:
+        condition: service_healthy
+      er-server:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "node -e \"fetch('http://localhost:4000/health').then(r=>r.ok?process.exit(0):process.exit(1)).catch(()=>process.exit(1))\""]

@@ -25,6 +25,12 @@ set -e
 
 VERSION="0.1.0"
 
+# Default seed node — used when ~/.tribe/seed is absent so a fresh
+# `brew install tribe && tribe start` joins the global mesh without
+# any manual configuration. Override with `tribe seed set <url>` for
+# a private mesh or to point at a different bootstrap node.
+DEFAULT_SEED_URL="wss://seed.tribeapp.wtf/gossip"
+
 # ── Resolve TRIBE_HOME ──────────────────────────────────────────────
 # If installed via brew, TRIBE_HOME is set by the formula wrapper.
 # Otherwise, resolve from this script's location.
@@ -308,16 +314,24 @@ show_network_info() {
 
   # Seed node info
   SEED_FILE="$HOME/.tribe/seed"
+  local SEED_URL=""
+  local SEED_LABEL=""
   if [ -f "$SEED_FILE" ]; then
     SEED_URL=$(head -1 "$SEED_FILE" | tr -d '[:space:]')
+    [ -n "$SEED_URL" ] && SEED_LABEL="custom"
+  else
+    SEED_URL="$DEFAULT_SEED_URL"
+    SEED_LABEL="default"
+  fi
+  if [ -n "$SEED_URL" ]; then
     SEED_HTTP=$(echo "$SEED_URL" | sed 's|ws://|http://|;s|wss://|https://|;s|/gossip$||')
     echo ""
-    echo -e "  ${BOLD}Seed node (public access for apps):${NC}"
+    echo -e "  ${BOLD}Seed node${NC} ${CYAN}($SEED_LABEL)${NC}"
     echo -e "    ${CYAN}Hub API:${NC}        $SEED_HTTP"
     echo -e "    ${CYAN}Gossip:${NC}         $SEED_URL"
   else
     echo ""
-    echo -e "  ${YELLOW}!${NC} No seed node configured — run ${CYAN}tribe seed set <url>${NC}"
+    echo -e "  ${YELLOW}!${NC} Seed disabled (empty ~/.tribe/seed) — run ${CYAN}tribe seed remove${NC} to revert to default"
   fi
 }
 
@@ -1125,12 +1139,20 @@ cmd_seed() {
     show|"")
       echo ""
       if [ -f "$SEED_FILE" ]; then
-        echo -e "  ${BOLD}Seed node:${NC} $(cat "$SEED_FILE")"
+        local current
+        current=$(head -1 "$SEED_FILE" | tr -d '[:space:]')
+        if [ -n "$current" ]; then
+          echo -e "  ${BOLD}Seed node:${NC} $current ${CYAN}(custom)${NC}"
+        else
+          echo -e "  ${BOLD}Seed node:${NC} ${YELLOW}disabled${NC} (empty ~/.tribe/seed)"
+          echo ""
+          echo -e "  Revert to default with: ${CYAN}tribe seed remove${NC}"
+        fi
       else
-        echo "  No seed node configured."
+        echo -e "  ${BOLD}Seed node:${NC} $DEFAULT_SEED_URL ${CYAN}(default)${NC}"
         echo ""
-        echo "  Set one with:"
-        echo -e "    ${CYAN}tribe seed set ws://<PUBLIC_IP>:4000/gossip${NC}"
+        echo "  Override with:"
+        echo -e "    ${CYAN}tribe seed set wss://<your-host>/gossip${NC}"
       fi
       echo ""
       ;;
@@ -1306,19 +1328,24 @@ cmd_start() {
   wait_for_service "Hub" "http://localhost:4000/health" 30
   wait_for_service "ER server" "http://localhost:3003/health" 30
 
-  # Auto-connect to seed node if configured
+  # Auto-connect to seed node. Falls back to DEFAULT_SEED_URL when
+  # ~/.tribe/seed is absent so a fresh install joins the global mesh
+  # automatically. An empty ~/.tribe/seed (set via `tribe seed set ""`
+  # or manual edit) opts out of any seed entirely.
   SEED_FILE="$HOME/.tribe/seed"
   if [ -f "$SEED_FILE" ]; then
     SEED_URL=$(head -1 "$SEED_FILE" | tr -d '[:space:]')
-    if [ -n "$SEED_URL" ]; then
-      info "Connecting to seed node: $SEED_URL"
-      if curl -sf -X POST http://localhost:4000/v1/peers \
-        -H "Content-Type: application/json" \
-        -d "{\"url\": \"$SEED_URL\"}" > /dev/null 2>&1; then
-        ok "Connected to seed node"
-      else
-        warn "Could not reach seed node (hub will keep retrying)"
-      fi
+  else
+    SEED_URL="$DEFAULT_SEED_URL"
+  fi
+  if [ -n "$SEED_URL" ]; then
+    info "Connecting to seed node: $SEED_URL"
+    if curl -sf -X POST http://localhost:4000/v1/peers \
+      -H "Content-Type: application/json" \
+      -d "{\"url\": \"$SEED_URL\"}" > /dev/null 2>&1; then
+      ok "Connected to seed node"
+    else
+      warn "Could not reach seed node (hub will keep retrying)"
     fi
   fi
 

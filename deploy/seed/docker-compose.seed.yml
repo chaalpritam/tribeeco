@@ -17,8 +17,10 @@ services:
 
   hub:
     build: ../../tribe-hub
-    ports:
-      - "4000:4000"
+    # No public port. Caddy reaches the hub on the internal docker
+    # network at hub:4000. Exposing 4000 directly would bypass TLS.
+    expose:
+      - "4000"
     environment:
       PORT: 4000
       HUB_ID: seed-1
@@ -41,6 +43,27 @@ services:
       start_period: 15s
     restart: unless-stopped
 
+  # Caddy terminates TLS for $DOMAIN, auto-provisioning Let's Encrypt
+  # certs on first boot, and reverse-proxies wss://$DOMAIN/gossip to
+  # the hub. Required env: DOMAIN. Without it Caddy errors out — that
+  # is intentional, public seed nodes must use TLS.
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN to the hostname pointing at this server}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - hub
+    restart: unless-stopped
+
 volumes:
   hub-pgdata:
   hub-media:
+  caddy-data:
+  caddy-config:

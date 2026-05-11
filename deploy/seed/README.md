@@ -95,3 +95,8 @@ Multiple seeds give the mesh redundancy. To run a second one (say in the US):
 1. Provision another VPS, point `seed-us.tribeapp.wtf` at it.
 2. Run the same setup script with `DOMAIN=seed-us.tribeapp.wtf`.
 3. (Optional) Update `DEFAULT_SEED_URL` in `bin/tribe` to a list and have the CLI try each in order — currently it's a single URL.
+
+## Related Docs
+
+- [TribeEco root README](../../Readme.md) — full architecture overview and distributed network setup
+- [tribe-hub README](../../tribe-hub/README.md) — hub environment variables and gossip configuration

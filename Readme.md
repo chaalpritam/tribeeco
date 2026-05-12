@@ -6,6 +6,12 @@
 
 TribeEco is a decentralized social protocol built on Solana. It provides on-chain identity (TID), delegated app keys, human-readable usernames (.tribe), a social graph with an Ephemeral Rollup sequencer, hub registration for peer discovery, and off-chain storage of signed messages (tweets, reactions, DMs, channels, polls, events, tasks, crowdfunds, tips, bookmarks) with peer-to-peer gossip sync. The protocol is designed so that users fully own their identity and social data — no platform can revoke access or censor content at the infrastructure layer.
 
+<p>
+  <img src="./cover/Screenshot%202026-05-12%20at%2012.19.03%E2%80%AFPM.png" alt="TribeEco Cover 1" width="70%" />
+  <img src="./cover/Screenshot%202026-05-12%20at%2012.50.46%E2%80%AFPM.png" alt="TribeEco Cover 2" width="70%" />
+</p>
+<img src="./cover/IMG_1760.PNG" alt="TribeEco Cover 3" width="50%" />
+
 ## Architecture
 
 ```

@@ -43,6 +43,7 @@ See [HOW-IT-WORKS.md](./HOW-IT-WORKS.md) for a detailed walkthrough of every lay
 | [tribeapp.wtf](./tribeapp.wtf) | Consumer-facing web app + landing page at tribeapp.wtf — hyperlocal social built entirely on the protocol |
 | [tribe-ios](./tribe-ios) | Native SwiftUI iOS client (Twitter-shaped) — full read/write against hub + ER, NaCl-box DMs, BLAKE3 + ed25519 signing via Apple CryptoKit |
 | [tribe-insta](./tribe-insta) | Native SwiftUI iOS client (Instagram-shaped) — photo grid, stories, reels; same hub + envelope format as tribe-ios. Scaffolding stage — see `tribe-insta/PLAN.md` |
+| [tribe-core-swift](./tribe-core-swift) | Shared Swift package consumed by tribe-ios + tribe-insta — crypto (BLAKE3, NaCl box, ed25519 signing, BIP39, SolanaHD), backup file format, envelope signer. See `tribe-core-swift/MIGRATION.md` |
 | [homebrew-tap](./homebrew-tap) | Homebrew formulas: `brew install tribe` (hub + ER) and `brew install tribe-app` (demo UI) |
 | ~~[tribe-indexer](./tribe-indexer)~~ | **Deprecated** — Solana event indexer, merged into tribe-hub |
 | ~~[tribe-tweet-server](./tribe-tweet-server)~~ | **Deprecated** — Tweet storage server, merged into tribe-hub |

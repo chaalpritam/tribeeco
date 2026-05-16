@@ -11,6 +11,7 @@ Decentralized social protocol on Solana. Mono-repo with submodules.
 - **tribe-app/** — Next.js 16 demo frontend. Kept as a submodule for monorepo devs, but **not bundled with `brew install tribe`** — ships separately as `brew install tribe-app`.
 - **tribe-ios/** — Native SwiftUI iOS client, Twitter-shaped. Full read/write against hub + ER. BLAKE3 + ed25519 signing via Apple CryptoKit; NaCl-box DMs.
 - **tribe-insta/** — Native SwiftUI iOS client, Instagram-shaped (photo grid, stories, reels). Sister to tribe-ios — same hub, same envelope format, different surface. Scaffolding stage; see `tribe-insta/PLAN.md` for the phased integration roadmap.
+- **tribe-core-swift/** — Shared Swift package consumed by both tribe-ios and tribe-insta. Hosts the byte-for-byte protocol code (BLAKE3, NaCl box, ed25519 signing, BIP39, SolanaHD, backup file format, envelope signer). Phase 4.1 (Crypto layer) shipped; tribe-ios and tribe-insta still carry their own copies until Phase 4.2/4.3 cuts them over. See `tribe-core-swift/MIGRATION.md`.
 - **homebrew-tap/** — Homebrew formulas for `brew install tribe` (hub + ER) and `brew install tribe-app` (demo UI).
 
 ## CLI (bin/tribe)

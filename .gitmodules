@@ -28,3 +28,9 @@
 [submodule "tribe-ios"]
 	path = tribe-ios
 	url = https://github.com/chaalpritam/tribe-ios.git
+[submodule "tribe-insta"]
+	path = tribe-insta
+	url = https://github.com/chaalpritam/tribe-insta.git
+[submodule "tribe-core-swift"]
+	path = tribe-core-swift
+	url = https://github.com/chaalpritam/tribe-core-swift.git

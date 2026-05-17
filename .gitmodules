@@ -36,7 +36,7 @@
 	url = https://github.com/chaalpritam/tribe-core-swift.git
 [submodule "tribe"]
 	path = tribe
-	url = https://github.com/chaalpritam/tribe.git
+	url = https://github.com/chaalpritam/Tribe.git
 [submodule "tribeprotocol.xyz"]
 	path = tribeprotocol.xyz
 	url = https://github.com/chaalpritam/tribeprotocol.xyz.git

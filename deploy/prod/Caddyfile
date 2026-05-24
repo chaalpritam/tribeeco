@@ -1,0 +1,13 @@
+# Hub API + gossip/client WebSockets. reverse_proxy upgrades
+# wss://$DOMAIN/gossip and wss://$DOMAIN/v1/ws automatically.
+{$DOMAIN} {
+	reverse_proxy hub:4000
+}
+
+# ER sequencer on :3003. Caddy provisions one cert for $DOMAIN and
+# serves TLS on this port too, matching the `<hub-host>:3003` ER URL
+# that `tribe-app link` and tribe-ios expect. The security group must
+# open TCP 3003 in addition to 80/443.
+{$DOMAIN}:3003 {
+	reverse_proxy er-server:3003
+}

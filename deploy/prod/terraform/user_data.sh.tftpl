@@ -1,0 +1,26 @@
+#!/bin/bash
+# cloud-init bootstrap. Runs as root on first boot. Full log at
+# /var/log/tribe-setup.log. Exports config into the environment so the
+# docker compose interpolation inside setup-aws.sh picks it up.
+set -uxo pipefail
+exec > /var/log/tribe-setup.log 2>&1
+
+export DOMAIN="${domain}"
+%{ if postgres_password != "" ~}
+export POSTGRES_PASSWORD="${postgres_password}"
+%{ endif ~}
+%{ if hub_id != "" ~}
+export HUB_ID="${hub_id}"
+%{ endif ~}
+%{ if solana_rpc_url != "" ~}
+export SOLANA_RPC_URL="${solana_rpc_url}"
+%{ endif ~}
+%{ if solana_ws_url != "" ~}
+export SOLANA_WS_URL="${solana_ws_url}"
+%{ endif ~}
+%{ if peers != "" ~}
+export PEERS="${peers}"
+%{ endif ~}
+
+curl -fsSL "${setup_url}" -o /tmp/setup-aws.sh
+bash /tmp/setup-aws.sh

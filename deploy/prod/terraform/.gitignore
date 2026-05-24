@@ -1,0 +1,16 @@
+# Terraform state holds resource ids and can contain secrets — never commit.
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# Local provider plugins / lock dirs.
+.terraform/
+.terraform.lock.hcl
+
+# Real var files (the .example is committed; actual values are not).
+terraform.tfvars
+*.auto.tfvars
+
+# Plan output.
+*.tfplan
+crash.log

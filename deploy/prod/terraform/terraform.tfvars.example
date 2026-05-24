@@ -1,0 +1,29 @@
+# Copy to terraform.tfvars and edit. Run: terraform init && terraform apply
+
+aws_region = "us-east-1"
+
+# Hostname for the node. Must match the DNS A record.
+domain = "seed.tribeprotocol.xyz"
+
+# Existing EC2 key pair name (create one in the EC2 console first).
+key_name = "my-keypair"
+
+# Lock SSH to your IP. Find it: curl ifconfig.me
+ssh_allowed_cidrs = ["203.0.113.4/32"]
+
+# Let Terraform create the DNS A record (Route 53 only). Leave empty to
+# add the record manually at your DNS provider, pointing at the
+# Elastic IP shown in `terraform output elastic_ip`.
+# route53_zone_id = "Z0123456789ABCDEFGHIJ"
+
+# Strong Postgres password (sensitive).
+postgres_password = "change-me-to-something-strong"
+
+# --- optional ---
+# instance_type = "t3.medium"
+# hub_id        = "seed-aws-1"
+# Dedicated devnet RPC removes the main reliability bottleneck:
+# solana_rpc_url = "https://devnet.helius-rpc.com/?api-key=YOUR_KEY"
+# solana_ws_url  = "wss://devnet.helius-rpc.com/?api-key=YOUR_KEY"
+# Peer with the canonical seed to share its mesh:
+# peers = "wss://seed.tribeapp.wtf/gossip"

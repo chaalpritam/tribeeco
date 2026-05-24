@@ -4,7 +4,7 @@ A seed node is a public TribeEco hub that other hubs use to bootstrap into the g
 
 This directory deploys a single seed fronted by [Caddy](https://caddyserver.com) for automatic Let's Encrypt TLS. The hub is reachable at `https://$DOMAIN` and `wss://$DOMAIN/gossip`.
 
-The default seed baked into `bin/tribe` is `wss://seed.tribeapp.wtf/gossip`. Fresh `brew install tribe` users join the global mesh automatically on first `tribe start`.
+The default seed baked into `bin/tribe` is `wss://seed.tribeprotocol.xyz/gossip`. Fresh `brew install tribe` users join the global mesh automatically on first `tribe start`. (That canonical node is the production hub + ER deployment in [`../prod/`](../prod/); this hub-only setup is the lighter alternative for extra seeds.)
 
 ## Prerequisites
 

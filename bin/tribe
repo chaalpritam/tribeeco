@@ -29,7 +29,7 @@ VERSION="0.1.0"
 # `brew install tribe && tribe start` joins the global mesh without
 # any manual configuration. Override with `tribe seed set <url>` for
 # a private mesh or to point at a different bootstrap node.
-DEFAULT_SEED_URL="wss://seed.tribeapp.wtf/gossip"
+DEFAULT_SEED_URL="wss://seed.tribeprotocol.xyz/gossip"
 
 # ── Resolve TRIBE_HOME ──────────────────────────────────────────────
 # If installed via brew, TRIBE_HOME is set by the formula wrapper.

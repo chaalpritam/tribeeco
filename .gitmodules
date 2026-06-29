@@ -25,9 +25,9 @@
 [submodule "tribeapp.wtf"]
 	path = tribeapp.wtf
 	url = https://github.com/chaalpritam/tribeapp.wtf.git
-[submodule "tribe-ios"]
-	path = tribe-ios
-	url = https://github.com/chaalpritam/tribe-ios.git
+[submodule "tribe-twitter"]
+	path = tribe-twitter
+	url = https://github.com/chaalpritam/tribe-twitter.git
 [submodule "tribe-insta"]
 	path = tribe-insta
 	url = https://github.com/chaalpritam/tribe-insta.git

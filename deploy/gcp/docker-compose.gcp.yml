@@ -1,0 +1,115 @@
+services:
+  hub-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: tribe
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tribe}
+      POSTGRES_DB: tribe_hub
+    volumes:
+      - hub-pgdata:/var/lib/postgresql/data
+      - ../../tribe-hub/src/storage/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tribe -d tribe_hub"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  er-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: tribe
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tribe}
+      POSTGRES_DB: tribe_er
+    volumes:
+      - er-pgdata:/var/lib/postgresql/data
+      - ../../tribe-er-server/src/storage/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tribe -d tribe_er"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  er-server:
+    build: ../../tribe-er-server
+    expose:
+      - "3003"
+    environment:
+      PORT: 3003
+      SOLANA_RPC_URL: ${SOLANA_RPC_URL:-https://api.devnet.solana.com}
+      DATABASE_URL: postgresql://tribe:${POSTGRES_PASSWORD:-tribe}@er-db:5432/tribe_er
+      SERVER_WALLET_PATH: /app/server-wallet.json
+      SETTLEMENT_INTERVAL_MS: 10000
+      SOCIAL_GRAPH_PROGRAM_ID: 8kKnWvbmTjWq5uPePk79RRbQMAXCszNFzHdRwUS4N74w
+      TID_REGISTRY_PROGRAM_ID: 4BSmJmRGQWKgioP9DG2bUuRS9U3V6soRauU7Nv6yGvHD
+    volumes:
+      - ./server-wallet.json:/app/server-wallet.json:ro
+    depends_on:
+      er-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3003/health').then(r=>r.ok?process.exit(0):process.exit(1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  hub:
+    build: ../../tribe-hub
+    expose:
+      - "4000"
+    environment:
+      PORT: 4000
+      HUB_ID: ${HUB_ID:-seed-gcp-1}
+      SOLANA_RPC_URL: ${SOLANA_RPC_URL:-https://api.devnet.solana.com}
+      SOLANA_WS_URL: ${SOLANA_WS_URL:-wss://api.devnet.solana.com}
+      DATABASE_URL: postgresql://tribe:${POSTGRES_PASSWORD:-tribe}@hub-db:5432/tribe_hub
+      ER_SERVER_URL: http://er-server:3003
+      MEDIA_DIR: /app/data/media
+      TID_REGISTRY_PROGRAM_ID: 4BSmJmRGQWKgioP9DG2bUuRS9U3V6soRauU7Nv6yGvHD
+      APP_KEY_REGISTRY_PROGRAM_ID: 5LtbFUeAoXWRovGpyWnRJhiCS62XsTYKVErT9kPpv4hN
+      SOCIAL_GRAPH_PROGRAM_ID: 8kKnWvbmTjWq5uPePk79RRbQMAXCszNFzHdRwUS4N74w
+      GOSSIP_INTERVAL_MS: 5000
+      MAX_SYNC_BATCH_SIZE: 100
+      PEERS: ${PEERS:-}
+    volumes:
+      - hub-media:/app/data/media
+    depends_on:
+      hub-db:
+        condition: service_healthy
+      er-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:4000/health').then(r=>r.ok?process.exit(0):process.exit(1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+      - "3003:3003"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN to the hostname pointing at this server}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - hub
+      - er-server
+    restart: unless-stopped
+
+volumes:
+  hub-pgdata:
+  er-pgdata:
+  hub-media:
+  caddy-data:
+  caddy-config:
+

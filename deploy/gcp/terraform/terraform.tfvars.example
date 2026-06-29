@@ -1,0 +1,25 @@
+project_id = "your-gcp-project"
+region     = "us-central1"
+zone       = "us-central1-a"
+
+domain = "seed.example.com"
+
+# Strongly prefer your current public IP, e.g. ["203.0.113.10/32"].
+ssh_allowed_ranges = ["0.0.0.0/0"]
+
+machine_type       = "e2-medium"
+boot_disk_gb       = 30
+postgres_password  = "change-me"
+hub_id             = "seed-gcp-1"
+
+# Optional: if your domain is in Cloud DNS, set the managed zone name
+# and Terraform will create seed.example.com -> static_ip.
+# dns_managed_zone = "example-com"
+
+# Optional: peer this GCP node with another seed so both share one mesh.
+# peers = "wss://seed.tribeprotocol.xyz/gossip"
+
+# Recommended for real traffic: dedicated devnet RPC/WS.
+# solana_rpc_url = "https://..."
+# solana_ws_url  = "wss://..."
+

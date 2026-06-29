@@ -1,0 +1,12 @@
+# Hub API + gossip/client WebSockets. reverse_proxy upgrades
+# wss://$DOMAIN/gossip and wss://$DOMAIN/v1/ws automatically.
+{$DOMAIN} {
+	reverse_proxy hub:4000
+}
+
+# ER sequencer on :3003, matching the URL convention used by tribe-app
+# and native clients.
+{$DOMAIN}:3003 {
+	reverse_proxy er-server:3003
+}
+

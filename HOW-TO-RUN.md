@@ -86,7 +86,7 @@ pnpm dev                # starts on port 3003
 ### 5. Frontend App
 
 ```bash
-cd tribe-app
+cd tribe-twitter-app
 pnpm install
 pnpm dev                # Next.js on port 3002
 ```
@@ -160,7 +160,7 @@ Key variables shared across services:
 
 ## Cross-device dev (same Wi-Fi)
 
-For the common solo-dev setup — protocol on a Mac mini, frontend dev on a MacBook Air, native iOS testing on iPhone, all on the same Wi-Fi — only the machine running the stack needs `tribe` installed. The dev laptop just needs its `tribe-app` checkout and two env vars.
+For the common solo-dev setup — protocol on a Mac mini, frontend dev on a MacBook Air, native iOS testing on iPhone, all on the same Wi-Fi — only the machine running the stack needs `tribe` installed. The dev laptop just needs its `tribe-twitter-app` checkout and two env vars.
 
 **Use the LAN IP, not `*.local`, for the dev frontend's env vars.** Chrome's `fetch()` trips on macOS' IPv6 link-local record for `.local` names and surfaces `ERR_ADDRESS_UNREACHABLE`; the IPv4 has no such hazard. The hostname is still fine for `ping` / `curl` / iPhone Safari.
 
@@ -175,7 +175,7 @@ cat > .env.local <<EOF
 NEXT_PUBLIC_HUB_URL=http://192.168.1.6:4000
 NEXT_PUBLIC_ER_SERVER_URL=http://192.168.1.6:3003
 EOF
-cd tribe-app && pnpm dev               # http://localhost:3002 talks to the remote hub
+cd tribe-twitter-app && pnpm dev               # http://localhost:3002 talks to the remote hub
 
 # On iPhone (same Wi-Fi):
 #   Web app: open http://yourmac.local:3002 in Safari (Safari handles the IPv6 fallback)

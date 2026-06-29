@@ -26,7 +26,7 @@ All 4 on-chain programs fully implemented and deployed to devnet:
 - On-chain fallback for reads, crash recovery via Postgres
 - Registered sequencer authority on devnet
 
-### tribe-app (Next.js) — Done
+### tribe-twitter-app (Next.js) — Done
 - 6 pages: Home (feed + composer), Explore (user list), Channels, Profile, Tweet thread, Search
 - Wallet connection via Solana wallet adapter (Phantom, Solflare)
 - 3-step registration: TID → username (.tribe) → signing key
@@ -49,7 +49,7 @@ All 4 on-chain programs fully implemented and deployed to devnet:
 - [x] 9. Rename FID→TID, Cast→Tweet across entire codebase
 - [x] 10. Deploy all 4 programs to Solana devnet
 - [x] 11. End-to-end smoke test on devnet
-- [x] 12. Build demo frontend (tribe-app)
+- [x] 12. Build demo frontend (tribe-twitter-app)
 - [x] 13. Add social features — follow/unfollow, likes, replies, channels, search
 - [x] 14. Add ER server — delegated instructions, sequencer, batched settlement
 - [x] 15. Wire ER into frontend — instant optimistic follows

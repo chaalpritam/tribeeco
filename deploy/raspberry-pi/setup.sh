@@ -141,7 +141,7 @@ done
 
 # Install frontend dependencies
 info "Installing frontend dependencies..."
-cd "$TRIBE_DIR/tribe-app"
+cd "$TRIBE_DIR/tribe-twitter-app"
 pnpm install --silent 2>/dev/null
 
 # Get network info
@@ -168,7 +168,7 @@ echo -e "      -H 'Content-Type: application/json' \\"
 echo -e "      -d '{\"url\": \"ws://<SEED_IP>:4000/gossip\"}'"
 echo ""
 echo -e "  ${BOLD}Start frontend (optional):${NC}"
-echo -e "    cd $TRIBE_DIR/tribe-app && pnpm dev -p 3002"
+echo -e "    cd $TRIBE_DIR/tribe-twitter-app && pnpm dev -p 3002"
 echo ""
 echo -e "  ${BOLD}Manage:${NC}"
 echo -e "    Logs:      cd $TRIBE_DIR && docker compose logs -f"

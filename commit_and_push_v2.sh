@@ -11,7 +11,7 @@ SUBMODULES=(
     "tribeprotocol.xyz"
     "tribe-tweet-server"
     "tribe-twitter"
-    "tribe-app"
+    "tribe-twitter-app"
     "tribe-insta"
     "tribe-core-swift"
     "tribeapp.wtf"

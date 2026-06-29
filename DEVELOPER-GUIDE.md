@@ -532,5 +532,5 @@ TribeEco/
 ├── tribe-sdk/          # TypeScript SDK
 ├── tribe-hub/          # Decentralized hub (gossip + storage + indexing)
 ├── tribe-er-server/    # Ephemeral Rollup sequencer
-└── tribe-app/          # Next.js demo frontend
+└── tribe-twitter-app/          # Next.js demo frontend
 ```

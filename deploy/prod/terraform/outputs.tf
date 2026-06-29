@@ -43,7 +43,7 @@ output "next_steps" {
 
     4. Point clients at it:
        tribe seed set wss://${var.domain}/gossip
-       tribe-app link https://${var.domain}
+       tribe-twitter-app link https://${var.domain}
 
     NOTE: the ER server wallet is funded by a one-time devnet airdrop. If
     it didn't land, top it up (see deploy/prod/README.md § wallet).

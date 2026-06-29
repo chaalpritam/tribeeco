@@ -183,7 +183,7 @@ echo -e "${BOLD}  tribe doctor${NC}"
 assert_output_contains "doctor checks docker" "docker" "$TRIBE" doctor
 assert_output_contains "doctor checks node" "node" "$TRIBE" doctor
 assert_output_contains "doctor checks pnpm" "pnpm" "$TRIBE" doctor
-assert_output_contains "doctor checks tribe-app dir" "tribe-app" "$TRIBE" doctor
+assert_output_contains "doctor checks tribe-twitter-app dir" "tribe-twitter-app" "$TRIBE" doctor
 assert_output_contains "doctor checks tribe-hub dir" "tribe-hub" "$TRIBE" doctor
 assert_output_contains "doctor checks tribe-er-server dir" "tribe-er-server" "$TRIBE" doctor
 assert_output_contains "doctor checks tribe-protocol dir" "tribe-protocol" "$TRIBE" doctor
@@ -206,7 +206,7 @@ echo ""
 
 echo -e "${BOLD}  project structure${NC}"
 
-for dir in tribe-app tribe-er-server tribe-hub tribe-protocol tribe-sdk; do
+for dir in tribe-twitter-app tribe-er-server tribe-hub tribe-protocol tribe-sdk; do
   if [ -d "$ROOT_DIR/$dir" ]; then
     pass "$dir/ exists"
   else
@@ -232,7 +232,7 @@ echo ""
 
 echo -e "${BOLD}  git submodules${NC}"
 
-for mod in tribe-app tribe-er-server tribe-hub tribe-protocol tribe-sdk; do
+for mod in tribe-twitter-app tribe-er-server tribe-hub tribe-protocol tribe-sdk; do
   if grep -q "path = $mod" "$ROOT_DIR/.gitmodules" 2>/dev/null; then
     pass "$mod registered as submodule"
   else

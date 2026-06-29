@@ -119,9 +119,9 @@ tribe peers          # should list seed-aws-1
 Demo web app:
 
 ```bash
-brew install tribe-app
-tribe-app link https://seed.tribeprotocol.xyz   # ER auto-derived as :3003
-tribe-app
+brew install tribe-twitter-app
+tribe-twitter-app link https://seed.tribeprotocol.xyz   # ER auto-derived as :3003
+tribe-twitter-app
 ```
 
 ## 5. Make this the default seed (optional)

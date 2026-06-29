@@ -5,7 +5,7 @@
 ```
 ┌────────────────────────────���────────────────────────────────────┐
 │                        User's Browser                           │
-│                        (tribe-app)                              │
+│                        (tribe-twitter-app)                              │
 │                                                                 │
 │  Phantom Wallet <-> Next.js Frontend                            │
 │       |                |           |            |               │
@@ -226,7 +226,7 @@ The ER server is a convenience layer, not a gatekeeper. If it goes down, users c
 
 ---
 
-## Layer 4: Frontend (tribe-app)
+## Layer 4: Frontend (tribe-twitter-app)
 
 ### How the pieces connect in the UI
 

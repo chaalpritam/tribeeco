@@ -178,7 +178,7 @@ cmd_help() {
   echo "  ER server        http://localhost:3003"
   echo ""
   echo -e "${BOLD}DEMO FRONTEND${NC}  (optional, separate formula)"
-  echo "  brew install tribe-app && tribe-app   # http://localhost:3002"
+  echo "  brew install tribe-twitter-app && tribe-twitter-app   # http://localhost:3002"
   echo ""
   echo -e "${BOLD}EXAMPLES${NC}"
   echo "  tribe start          # boot everything"
@@ -370,7 +370,7 @@ cmd_network() {
 # tribe share — prints copy-paste URLs for handing this hub to another
 # device on the same Wi-Fi. The hub + ER server are framed as "RPC URLs"
 # because that's the typical use case: a separate machine runs the
-# tribe-app demo frontend (or a native client) and points at this hub.
+# tribe-twitter-app demo frontend (or a native client) and points at this hub.
 #
 # Prefers the Bonjour hostname (`*.local`) since it survives DHCP lease
 # changes — IP is shown as a fallback for non-Apple clients that can't
@@ -422,11 +422,11 @@ cmd_share() {
   echo -e "    ${CYAN}Hub API:${NC}    ${HUB_URL}"
   echo -e "    ${CYAN}ER server:${NC}  ${ER_URL}"
   echo ""
-  echo -e "  ${BOLD}From another laptop with tribe-app installed:${NC}"
-  echo -e "      ${CYAN}tribe-app link ${ENV_HUB_URL}${NC}"
-  echo -e "      ${CYAN}tribe-app${NC}                                     # http://localhost:3002"
+  echo -e "  ${BOLD}From another laptop with tribe-twitter-app installed:${NC}"
+  echo -e "      ${CYAN}tribe-twitter-app link ${ENV_HUB_URL}${NC}"
+  echo -e "      ${CYAN}tribe-twitter-app${NC}                                     # http://localhost:3002"
   echo ""
-  echo -e "  ${BOLD}From a tribe-app checkout (no install) — paste into .env.local:${NC}"
+  echo -e "  ${BOLD}From a tribe-twitter-app checkout (no install) — paste into .env.local:${NC}"
   echo "      NEXT_PUBLIC_HUB_URL=${ENV_HUB_URL}"
   echo "      NEXT_PUBLIC_ER_SERVER_URL=${ENV_ER_URL}"
   if [ -n "$IP_HUB_URL" ] && [ "$ENV_HUB_URL" != "$HUB_URL" ]; then
@@ -1373,7 +1373,7 @@ cmd_start() {
     echo -e "           AC + external display will still sleep — see 'tribe help'."
     echo ""
   fi
-  echo -e "    ${YELLOW}Demo UI?${NC} ${CYAN}brew install tribe-app && tribe-app${NC} (separate formula)"
+  echo -e "    ${YELLOW}Demo UI?${NC} ${CYAN}brew install tribe-twitter-app && tribe-twitter-app${NC} (separate formula)"
   echo -e "    ${YELLOW}Tip:${NC} Use ${CYAN}tribe share${NC} to hand this stack to your other devices on Wi-Fi"
   echo -e "         and ${CYAN}tribe peer add <url>${NC} to connect another node"
   echo ""
@@ -1475,7 +1475,7 @@ cmd_reset() {
     echo "    • ~/.tribe/hub-id  (use --hard to also wipe this)"
     echo "    • ~/.tribe/seed    (use --hard to also wipe this)"
   fi
-  echo "    • ~/.tribe/tribe-app.env (demo UI hub URL)"
+  echo "    • ~/.tribe/tribe-twitter-app.env (demo UI hub URL)"
   echo ""
 
   if [ "$assume_yes" -ne 1 ]; then

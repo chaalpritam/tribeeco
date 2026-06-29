@@ -1,6 +1,6 @@
-[submodule "tribe-app"]
-	path = tribe-app
-	url = https://github.com/chaalpritam/tribe-demo-app.git
+[submodule "tribe-twitter-app"]
+	path = tribe-twitter-app
+	url = https://github.com/chaalpritam/tribe-twitter-app.git
 [submodule "tribe-er-server"]
 	path = tribe-er-server
 	url = https://github.com/chaalpritam/tribe-er-server.git

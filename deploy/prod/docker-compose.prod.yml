@@ -107,7 +107,7 @@ services:
   # Caddy terminates TLS for $DOMAIN, auto-provisioning Let's Encrypt
   # certs. Two sites:
   #   https://$DOMAIN        -> hub:4000   (API + wss /gossip + /v1/ws)
-  #   https://$DOMAIN:3003   -> er-server  (matches `tribe-app link`'s
+  #   https://$DOMAIN:3003   -> er-server  (matches `tribe-twitter-app link`'s
   #                                          <host>:3003 ER URL convention)
   caddy:
     image: caddy:2-alpine

@@ -12,8 +12,8 @@ echo ""
 echo -e "${CYAN}==> Stopping TribeEco...${NC}"
 
 # 1. Stop the frontend app
-if [ -f "$LOG_DIR/tribe-app.pid" ]; then
-  PID=$(cat "$LOG_DIR/tribe-app.pid")
+if [ -f "$LOG_DIR/tribe-twitter-app.pid" ]; then
+  PID=$(cat "$LOG_DIR/tribe-twitter-app.pid")
   if kill -0 "$PID" 2>/dev/null; then
     echo "  [1/2] Stopping frontend app (PID $PID)..."
     kill "$PID" 2>/dev/null
@@ -21,7 +21,7 @@ if [ -f "$LOG_DIR/tribe-app.pid" ]; then
   else
     echo "  [1/2] Frontend app already stopped."
   fi
-  rm -f "$LOG_DIR/tribe-app.pid"
+  rm -f "$LOG_DIR/tribe-twitter-app.pid"
 else
   echo "  [1/2] No frontend app PID found."
 fi

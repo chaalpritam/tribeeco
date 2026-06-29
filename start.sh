@@ -78,18 +78,18 @@ else
   ok "pnpm found ($(pnpm --version))"
 fi
 
-# 6. node_modules for tribe-app
-if [ ! -d "$ROOT_DIR/tribe-app/node_modules" ]; then
-  warn "tribe-app dependencies not installed. Running 'pnpm install'..."
-  (cd "$ROOT_DIR/tribe-app" && pnpm install)
+# 6. node_modules for tribe-twitter-app
+if [ ! -d "$ROOT_DIR/tribe-twitter-app/node_modules" ]; then
+  warn "tribe-twitter-app dependencies not installed. Running 'pnpm install'..."
+  (cd "$ROOT_DIR/tribe-twitter-app" && pnpm install)
   if [ $? -ne 0 ]; then
-    fail "pnpm install failed for tribe-app."
+    fail "pnpm install failed for tribe-twitter-app."
     MISSING=1
   else
-    ok "tribe-app dependencies installed"
+    ok "tribe-twitter-app dependencies installed"
   fi
 else
-  ok "tribe-app dependencies present"
+  ok "tribe-twitter-app dependencies present"
 fi
 
 # 7. Required build directories
@@ -185,9 +185,9 @@ wait_for_service "ER server" "http://localhost:3003/health" 30
 
 # 4. Start the frontend app
 echo "[4/4] Starting frontend app (Next.js on port 3002)..."
-cd "$ROOT_DIR/tribe-app"
-pnpm dev -p 3002 > "$LOG_DIR/tribe-app.log" 2>&1 &
-echo $! > "$LOG_DIR/tribe-app.pid"
+cd "$ROOT_DIR/tribe-twitter-app"
+pnpm dev -p 3002 > "$LOG_DIR/tribe-twitter-app.log" 2>&1 &
+echo $! > "$LOG_DIR/tribe-twitter-app.pid"
 
 # Wait for frontend to be reachable
 for i in $(seq 1 20); do
@@ -207,7 +207,7 @@ echo -e "    ${CYAN}Hub:${NC}            http://localhost:4000"
 echo -e "    ${CYAN}ER server:${NC}      http://localhost:3003"
 echo ""
 echo -e "    ${CYAN}Network:${NC}        Solana Devnet"
-echo -e "    ${CYAN}App logs:${NC}       $LOG_DIR/tribe-app.log"
+echo -e "    ${CYAN}App logs:${NC}       $LOG_DIR/tribe-twitter-app.log"
 echo -e "    ${CYAN}Docker logs:${NC}    docker-compose logs -f"
 echo -e "    ${CYAN}Stop with:${NC}      ./stop.sh"
 echo ""

@@ -127,7 +127,7 @@ sudo DOMAIN=seed.example.com docker compose -f docker-compose.gcp.yml up -d --bu
 
 - Port `4000` is not exposed publicly. Caddy terminates TLS and proxies
   to the hub on the internal Docker network.
-- Port `3003` is exposed with TLS because `tribe-app link` and the
+- Port `3003` is exposed with TLS because `tribe-twitter-app link` and the
   native clients derive the ER URL as `<hub-host>:3003`.
 - The ER server wallet is generated at
   `/opt/tribe-gcp/deploy/gcp/server-wallet.json`. It is a private key:

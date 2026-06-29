@@ -19,7 +19,7 @@ TribeEco is a decentralized social protocol built on Solana. It provides on-chai
                              |
                        tribe-sdk (TypeScript)
                        /         |          \
-   tribe-app / tribeapp.wtf   tribe-twitter / tribe-insta   tribe-er-server   tribe-hub
+   tribe-twitter-app / tribeapp.wtf   tribe-twitter / tribe-insta   tribe-er-server   tribe-hub
         (web frontends)              (native iOS)         (ER sequencer)    (storage + indexing + gossip)
                 \                  |                /
   ┌──────────────┴──────────────────┴──────────────┴────┐
@@ -39,12 +39,12 @@ See [HOW-IT-WORKS.md](./HOW-IT-WORKS.md) for a detailed walkthrough of every lay
 | [tribe-sdk](./tribe-sdk) | TypeScript SDK — DirectSolana and EphemeralRollup providers; clients for identity, tweets, DMs, profiles, channels, bookmarks, polls, events, tasks, crowdfunds, tips, search |
 | [tribe-hub](./tribe-hub) | Decentralized hub — signed-message storage + Solana indexer + gossip peer sync; REST + WebSocket APIs |
 | [tribe-er-server](./tribe-er-server) | Ephemeral Rollup sequencer — instant follows, batched L1 settlement every 10s |
-| [tribe-app](./tribe-app) | Next.js frontend — protocol-first reference client with multi-node failover |
+| [tribe-twitter-app](./tribe-twitter-app) | Next.js frontend — protocol-first reference client with multi-node failover |
 | [tribeapp.wtf](./tribeapp.wtf) | Consumer-facing web app + landing page at tribeapp.wtf — hyperlocal social built entirely on the protocol |
 | [tribe-twitter](./tribe-twitter) | Native SwiftUI iOS client (Twitter-shaped) — full read/write against hub + ER, NaCl-box DMs, BLAKE3 + ed25519 signing via Apple CryptoKit |
 | [tribe-insta](./tribe-insta) | Native SwiftUI iOS client (Instagram-shaped) — photo grid, stories, reels; same hub + envelope format as tribe-twitter. Scaffolding stage — see `tribe-insta/PLAN.md` |
 | [tribe-core-swift](./tribe-core-swift) | Shared Swift package consumed by tribe-twitter + tribe-insta — crypto (BLAKE3, NaCl box, ed25519 signing, BIP39, SolanaHD), backup file format, envelope signer. See `tribe-core-swift/MIGRATION.md` |
-| [homebrew-tap](./homebrew-tap) | Homebrew formulas: `brew install tribe` (hub + ER) and `brew install tribe-app` (demo UI) |
+| [homebrew-tap](./homebrew-tap) | Homebrew formulas: `brew install tribe` (hub + ER) and `brew install tribe-twitter-app` (demo UI) |
 | ~~[tribe-indexer](./tribe-indexer)~~ | **Deprecated** — Solana event indexer, merged into tribe-hub |
 | ~~[tribe-tweet-server](./tribe-tweet-server)~~ | **Deprecated** — Tweet storage server, merged into tribe-hub |
 
@@ -139,7 +139,7 @@ ws://<PUBLIC_IP>:4000/gossip
 git clone --recurse-submodules https://github.com/chaalpritam/TribeEco.git
 cd TribeEco
 docker-compose up -d        # Start hub, ER server, and databases
-cd tribe-app && pnpm install && pnpm dev -p 3002   # Start frontend (optional)
+cd tribe-twitter-app && pnpm install && pnpm dev -p 3002   # Start frontend (optional)
 ```
 
 ## Build from Source
@@ -209,7 +209,7 @@ Human-readable names bound to TIDs. Usernames are up to 20 characters, require a
 |---------|------|-------------|
 | tribe-hub | 4000 | Signed-message storage + Solana indexing + gossip sync |
 | tribe-er-server | 3003 | ER sequencer + L1 settlement |
-| tribe-app | 3002 | Next.js frontend (runs outside Docker) |
+| tribe-twitter-app | 3002 | Next.js frontend (runs outside Docker) |
 | Hub PostgreSQL | 5436 | Hub database |
 | ER PostgreSQL | 5435 | ER server database |
 
@@ -241,7 +241,7 @@ tribe stats          # uptime, content counts, recent activity, DB size
 tribe backup [file]  # snapshot DBs + wallet + seed + media to a tar.gz
 tribe restore <file> # restore from a backup (REPLACES current data)
 tribe share [--qr]   # print URLs to hand to other devices on the same Wi-Fi
-tribe link <hub>     # point this machine's tribe-app dev server at a remote hub
+tribe link <hub>     # point this machine's tribe-twitter-app dev server at a remote hub
 tribe reset          # wipe data and start fresh
 tribe version        # print version
 ```
@@ -260,10 +260,10 @@ tribe share --qr     # also renders a QR for the frontend (needs `brew install q
 
 `tribe share` prefers the Bonjour/mDNS hostname (`yourmac.local`) over the LAN IP — it survives DHCP lease changes, and macOS + iOS resolve it natively. The IP is shown as a fallback for clients that don't speak `.local`.
 
-**On your dev laptop** (e.g. MacBook Air working on `tribe-app` against the Mac mini's hub) — **no tribe install needed**, just two env vars. Use the **LAN IP**, not the `*.local` hostname (see why below):
+**On your dev laptop** (e.g. MacBook Air working on `tribe-twitter-app` against the Mac mini's hub) — **no tribe install needed**, just two env vars. Use the **LAN IP**, not the `*.local` hostname (see why below):
 
 ```bash
-# In your tribe-app checkout (substitute the IP `tribe share` prints):
+# In your tribe-twitter-app checkout (substitute the IP `tribe share` prints):
 cat > .env.local <<EOF
 NEXT_PUBLIC_HUB_URL=http://192.168.1.6:4000
 NEXT_PUBLIC_ER_SERVER_URL=http://192.168.1.6:3003
@@ -333,7 +333,7 @@ tribe link --check http://yourmac.local:4000
 |---|---|---|
 | Browser shows `ERR_ADDRESS_UNREACHABLE` on `http://yourmac.local:4000/...` but `curl` / `ping` against the same URL work | Chrome's `fetch()` tries the IPv6 link-local (`fe80::...`) form first and can't route it without a zone identifier | Use the LAN IPv4 in `.env.local` (e.g. `http://192.168.1.6:4000`) — `tribe share` shows it. The IP has no dual-stack hazard. |
 | Hub `/health` unreachable from another laptop, but `localhost:4000/health` works on the hub machine | macOS firewall blocking incoming Node / Docker | System Settings → Network → Firewall → allow Node + Docker (or temporarily disable) |
-| Frontend `:3002` unreachable but hub + ER are reachable | `tribe-app` predates the `-H 0.0.0.0` fix in the local `pnpm dev` script | On the hub machine: `brew upgrade tribe && brew reinstall tribe`, then `tribe stop && tribe start` |
+| Frontend `:3002` unreachable but hub + ER are reachable | `tribe-twitter-app` predates the `-H 0.0.0.0` fix in the local `pnpm dev` script | On the hub machine: `brew upgrade tribe && brew reinstall tribe`, then `tribe stop && tribe start` |
 | `*.local` doesn't resolve from a non-Apple device | mDNS / Bonjour limitation | Use the IP fallback `tribe share` prints under "Fallback IP" |
 | Every submodule warns "Skipping submodule…" on a fresh `brew install` | Old formula version (pre-fix) | `brew upgrade tribe` — the formula now inits submodules in install, not post_install |
 

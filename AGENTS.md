@@ -8,11 +8,11 @@ Decentralized social protocol on Solana. Mono-repo with submodules.
 - **tribe-sdk/** — TypeScript SDK. DirectSolana and EphemeralRollup providers.
 - **tribe-hub/** — Decentralized hub. Tweet storage + Solana indexer + gossip peer sync. Fastify + PostgreSQL.
 - **tribe-er-server/** — Ephemeral Rollup sequencer. Instant follows, batched L1 settlement every 10s. Fastify + PostgreSQL.
-- **tribe-app/** — Next.js 16 demo frontend. Kept as a submodule for monorepo devs, but **not bundled with `brew install tribe`** — ships separately as `brew install tribe-app`.
+- **tribe-twitter-app/** — Next.js 16 demo frontend. Kept as a submodule for monorepo devs, but **not bundled with `brew install tribe`** — ships separately as `brew install tribe-twitter-app`.
 - **tribe-twitter/** — Native SwiftUI iOS client, Twitter-shaped. Full read/write against hub + ER. BLAKE3 + ed25519 signing via Apple CryptoKit; NaCl-box DMs.
 - **tribe-insta/** — Native SwiftUI iOS client, Instagram-shaped (photo grid, stories, reels). Sister to tribe-twitter — same hub, same envelope format, different surface. Scaffolding stage; see `tribe-insta/PLAN.md` for the phased integration roadmap.
 - **tribe-core-swift/** — Shared Swift package consumed by both tribe-twitter and tribe-insta. Hosts the byte-for-byte protocol code (BLAKE3, NaCl box, ed25519 signing, BIP39, SolanaHD, backup file format, envelope signer). Phase 4.1 (Crypto layer) shipped; tribe-twitter and tribe-insta still carry their own copies until Phase 4.2/4.3 cuts them over. See `tribe-core-swift/MIGRATION.md`.
-- **homebrew-tap/** — Homebrew formulas for `brew install tribe` (hub + ER) and `brew install tribe-app` (demo UI).
+- **homebrew-tap/** — Homebrew formulas for `brew install tribe` (hub + ER) and `brew install tribe-twitter-app` (demo UI).
 
 ## CLI (bin/tribe)
 
@@ -30,14 +30,14 @@ The main CLI script at `bin/tribe` manages the hub + ER stack (no frontend). Key
 - `tribe network` — Shows local, LAN, and seed node URLs.
 - `tribe share` — Print copy-paste hub/ER URLs + reachability self-check for handing the stack to other devices on Wi-Fi.
 
-The frontend used to boot as part of `tribe start` (port 3002). It now ships as a separate `tribe-app` formula — `tribe` no longer touches the frontend. To run the UI: `brew install tribe-app && tribe-app`.
+The frontend used to boot as part of `tribe start` (port 3002). It now ships as a separate `tribe-twitter-app` formula — `tribe` no longer touches the frontend. To run the UI: `brew install tribe-twitter-app && tribe-twitter-app`.
 
-## CLI (tribe-app)
+## CLI (tribe-twitter-app)
 
-The `tribe-app` formula installs a wrapper at `bin/tribe-app`:
+The `tribe-twitter-app` formula installs a wrapper at `bin/tribe-twitter-app`:
 
-- `tribe-app` — boots Next.js dev server on `$PORT` (default 3002). Sources `~/.tribe/tribe-app.env` if present so hub URL persists across runs.
-- `tribe-app link <hub-url>` — writes `~/.tribe/tribe-app.env` with `NEXT_PUBLIC_HUB_URL` + `NEXT_PUBLIC_ER_SERVER_URL` derived from the hub URL. Used to point the demo UI at a hub on another LAN machine.
+- `tribe-twitter-app` — boots Next.js dev server on `$PORT` (default 3002). Sources `~/.tribe/tribe-twitter-app.env` if present so hub URL persists across runs.
+- `tribe-twitter-app link <hub-url>` — writes `~/.tribe/tribe-twitter-app.env` with `NEXT_PUBLIC_HUB_URL` + `NEXT_PUBLIC_ER_SERVER_URL` derived from the hub URL. Used to point the demo UI at a hub on another LAN machine.
 
 ## Distributed Network
 
@@ -59,15 +59,15 @@ Two formulas, each mirrored in two locations:
 - `Formula/tribe.rb` — local copy for reference
 - Source: `https://github.com/chaalpritam/TribeEco.git` (this repo)
 - Deps: node, pnpm, docker, docker-compose, colima, solana. Tailscale optional.
-- `install` clones every submodule **except `tribe-app`** (which has its own formula).
+- `install` clones every submodule **except `tribe-twitter-app`** (which has its own formula).
 - `post_install` restores ER server wallet from `~/.tribe/server-wallet.json`.
 
-**`tribe-app`** (Next.js demo UI):
-- `homebrew-tap/Formula/tribe-app.rb` — what brew uses
-- `Formula/tribe-app.rb` — local copy for reference
-- Source: `https://github.com/chaalpritam/tribe-demo-app.git` (the standalone repo, not via the TribeEco monorepo)
+**`tribe-twitter-app`** (Next.js demo UI):
+- `homebrew-tap/Formula/tribe-twitter-app.rb` — what brew uses
+- `Formula/tribe-twitter-app.rb` — local copy for reference
+- Source: `https://github.com/chaalpritam/tribe-twitter-app.git` (the standalone repo, not via the TribeEco monorepo)
 - Deps: node, pnpm.
-- `install` writes `bin/tribe-app` wrapper that supports `run` (default) and `link <hub-url>` subcommands.
+- `install` writes `bin/tribe-twitter-app` wrapper that supports `run` (default) and `link <hub-url>` subcommands.
 - `post_install` runs `pnpm install` in `libexec`.
 
 Formula changes must be pushed to BOTH the `homebrew-tap` submodule AND the main repo (the local copies are reference-only — `homebrew-tap/Formula/*.rb` is the live one).
@@ -77,13 +77,13 @@ Formula changes must be pushed to BOTH the `homebrew-tap` submodule AND the main
 - `~/.tribe/server-wallet.json` — ER server Solana keypair. Survives reinstalls.
 - `~/.tribe/hub-id` — This hub's gossip identifier (e.g. `hub-laptop1` or `hub-a3f9b1`). Auto-generated as a unique random value on first `tribe start` so two laptops installed from the same brew formula don't both come up as `hub-primary` and refuse to peer. Read by the CLI and exported as `HUB_ID` for `docker-compose.yml`'s `${HUB_ID:-hub-primary}` substitution. Manage with `tribe hub-id [show | set <name> | reset]`.
 - `~/.tribe/seed` — Seed node WebSocket URL. One line, e.g. `ws://1.2.3.4:4000/gossip`.
-- `~/.tribe/tribe-app.env` — `NEXT_PUBLIC_HUB_URL` + `NEXT_PUBLIC_ER_SERVER_URL` for the `tribe-app` demo UI. Written by `tribe-app link <hub-url>`, sourced on every `tribe-app` run.
+- `~/.tribe/tribe-twitter-app.env` — `NEXT_PUBLIC_HUB_URL` + `NEXT_PUBLIC_ER_SERVER_URL` for the `tribe-twitter-app` demo UI. Written by `tribe-twitter-app link <hub-url>`, sourced on every `tribe-twitter-app` run.
 
 ## Key Ports
 
 | Service | Port | Owned by |
 |---|---|---|
-| Demo frontend (Next.js) | 3002 | `tribe-app` formula (separate install) |
+| Demo frontend (Next.js) | 3002 | `tribe-twitter-app` formula (separate install) |
 | ER Server | 3003 | `tribe` |
 | Hub API | 4000 | `tribe` |
 | ER Database (Postgres) | 5435 | `tribe` |
@@ -96,7 +96,7 @@ Submodules use HTTPS URLs in `.gitmodules` (for unauthenticated cloning). For pu
 ## Docker
 
 - Root `docker-compose.yml` runs the full stack: er-db, hub-db, er-server, hub.
-- The demo frontend (`tribe-app`) runs outside Docker via `pnpm dev` and is now a separate brew formula — not part of `tribe start`.
+- The demo frontend (`tribe-twitter-app`) runs outside Docker via `pnpm dev` and is now a separate brew formula — not part of `tribe start`.
 - `deploy/seed/docker-compose.seed.yml` runs only hub + hub-db for seed nodes.
 
 ## Hub Gossip Protocol

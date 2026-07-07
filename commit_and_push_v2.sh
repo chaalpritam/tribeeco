@@ -9,7 +9,7 @@ SUBMODULES=(
     "tribe-protocol"
     "homebrew-tap"
     "tribeprotocol.xyz"
-    "tribe-tweet-server"
+    "tribe-cast-server"
     "tribe-twitter"
     "tribe-twitter-app"
     "tribe-insta"

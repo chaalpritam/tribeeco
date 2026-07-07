@@ -47,7 +47,7 @@ See [HOW-IT-WORKS.md](./HOW-IT-WORKS.md) for a detailed walkthrough of every lay
 | [tribe-core-swift](./tribe-core-swift) | Shared Swift package consumed by tribe, tribe-twitter, and tribe-insta — crypto, hub API, models. See `tribe-core-swift/MIGRATION.md` |
 | [homebrew-tap](./homebrew-tap) | Homebrew formulas: `brew install tribe` (hub + ER) and `brew install tribe-twitter-app` (demo UI) |
 | ~~[tribe-indexer](./tribe-indexer)~~ | **Deprecated** — Solana event indexer, merged into tribe-hub |
-| ~~[tribe-tweet-server](./tribe-tweet-server)~~ | **Deprecated** — Tweet storage server, merged into tribe-hub |
+| ~~[tribe-cast-server](./tribe-cast-server)~~ | **Deprecated** — Cast/message storage server (`tribe-cast-server.git`), merged into tribe-hub |
 
 ## Run a Tribe Node
 

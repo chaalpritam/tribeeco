@@ -25,7 +25,7 @@ readmes = [
     "./tribe-protocol/README.md",
     "./homebrew-tap/README.md",
     "./tribeprotocol.xyz/README.md",
-    "./tribe-tweet-server/README.md",
+    "./tribe-cast-server/README.md",
     "./tribe-twitter/README.md",
     "./tribe-twitter-app/README.md",
     "./tribe-insta/README.md",

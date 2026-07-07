@@ -19,8 +19,8 @@
 [submodule "tribe-indexer"]
 	path = tribe-indexer
 	url = https://github.com/chaalpritam/tribe-indexer.git
-[submodule "tribe-tweet-server"]
-	path = tribe-tweet-server
+[submodule "tribe-cast-server"]
+	path = tribe-cast-server
 	url = https://github.com/chaalpritam/tribe-cast-server.git
 [submodule "tribeapp.wtf"]
 	path = tribeapp.wtf

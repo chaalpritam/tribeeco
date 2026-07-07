@@ -214,3 +214,5 @@ State lives in two docker volumes (`hub-pgdata`, `er-pgdata`) and
 
 - `../seed/README.md` — the lighter hub-only seed (no ER server).
 - `../../Readme.md` — full architecture overview.
+- `../../tribe/README.md` — hyperlocal iOS client (`app.tribe.app`).
+- `../../tribe-twitter/README.md` — Twitter-shaped iOS client (`app.tribe.twitter`).

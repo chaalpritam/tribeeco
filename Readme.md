@@ -19,7 +19,7 @@ TribeEco is a decentralized social protocol built on Solana. It provides on-chai
                              |
                        tribe-sdk (TypeScript)
                        /         |          \
-   tribe-twitter-app / tribeapp.wtf   tribe-twitter / tribe-insta   tribe-er-server   tribe-hub
+   tribe-twitter-app / tribeapp.wtf   tribe / tribe-twitter / tribe-insta   tribe-er-server   tribe-hub
         (web frontends)              (native iOS)         (ER sequencer)    (storage + indexing + gossip)
                 \                  |                /
   ┌──────────────┴──────────────────┴──────────────┴────┐
@@ -41,9 +41,10 @@ See [HOW-IT-WORKS.md](./HOW-IT-WORKS.md) for a detailed walkthrough of every lay
 | [tribe-er-server](./tribe-er-server) | Ephemeral Rollup sequencer — instant follows, batched L1 settlement every 10s |
 | [tribe-twitter-app](./tribe-twitter-app) | Next.js frontend — protocol-first reference client with multi-node failover |
 | [tribeapp.wtf](./tribeapp.wtf) | Consumer-facing web app + landing page at tribeapp.wtf — hyperlocal social built entirely on the protocol |
-| [tribe-twitter](./tribe-twitter) | Native SwiftUI iOS client (Twitter-shaped) — full read/write against hub + ER, NaCl-box DMs, BLAKE3 + ed25519 signing via Apple CryptoKit |
-| [tribe-insta](./tribe-insta) | Native SwiftUI iOS client (Instagram-shaped) — photo grid, stories, reels; same hub + envelope format as tribe-twitter. Scaffolding stage — see `tribe-insta/PLAN.md` |
-| [tribe-core-swift](./tribe-core-swift) | Shared Swift package consumed by tribe-twitter + tribe-insta — crypto (BLAKE3, NaCl box, ed25519 signing, BIP39, SolanaHD), backup file format, envelope signer. See `tribe-core-swift/MIGRATION.md` |
+| [tribe](./tribe) | Native SwiftUI hyperlocal iOS client (`app.tribe.app`) — city/channel feeds, explore, map, tribes; ports tribeapp.wtf |
+| [tribe-twitter](./tribe-twitter) | Native SwiftUI iOS client (Twitter-shaped, `app.tribe.twitter`) — full read/write against hub + ER, NaCl-box DMs, BLAKE3 + ed25519 signing |
+| [tribe-insta](./tribe-insta) | Native SwiftUI iOS client (Instagram-shaped) — photo grid, stories, reels; same hub + envelope format. Hub-backed beta — see `tribe-insta/PLAN.md` |
+| [tribe-core-swift](./tribe-core-swift) | Shared Swift package consumed by tribe, tribe-twitter, and tribe-insta — crypto, hub API, models. See `tribe-core-swift/MIGRATION.md` |
 | [homebrew-tap](./homebrew-tap) | Homebrew formulas: `brew install tribe` (hub + ER) and `brew install tribe-twitter-app` (demo UI) |
 | ~~[tribe-indexer](./tribe-indexer)~~ | **Deprecated** — Solana event indexer, merged into tribe-hub |
 | ~~[tribe-tweet-server](./tribe-tweet-server)~~ | **Deprecated** — Tweet storage server, merged into tribe-hub |

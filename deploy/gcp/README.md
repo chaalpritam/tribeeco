@@ -135,3 +135,9 @@ sudo DOMAIN=seed.example.com docker compose -f docker-compose.gcp.yml up -d --bu
 - Public Solana devnet RPC is rate-limited. For a real public seed,
   set `SOLANA_RPC_URL` and `SOLANA_WS_URL` to a dedicated provider.
 
+## Related
+
+- [TribeEco README](../../Readme.md) — architecture and `tribe` CLI
+- [deploy/seed/README.md](../seed/README.md) — hub-only seed (no ER)
+- [tribe README](../../tribe/README.md) — hyperlocal iOS client
+- [tribe-hub README](../../tribe-hub/README.md) — hub API reference

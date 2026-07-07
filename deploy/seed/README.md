@@ -100,3 +100,5 @@ Multiple seeds give the mesh redundancy. To run a second one (say in the US):
 
 - [TribeEco root README](../../Readme.md) — full architecture overview and distributed network setup
 - [tribe-hub README](../../tribe-hub/README.md) — hub environment variables and gossip configuration
+- [tribe README](../../tribe/README.md) — hyperlocal iOS client (`app.tribe.app`)
+- [tribe-twitter README](../../tribe-twitter/README.md) — Twitter-shaped iOS client (`app.tribe.twitter`)
